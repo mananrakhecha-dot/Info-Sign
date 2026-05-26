@@ -14,6 +14,9 @@
   "dependencies": {
     "@bull-board/api": "^5.21.2",
     "@bull-board/express": "^5.21.2",
+    "@signpdf/placeholder-pdf-lib": "^3.3.0",
+    "@signpdf/signer-p12": "^3.3.0",
+    "@signpdf/signpdf": "^3.3.0",
     "bcrypt": "^5.1.1",
     "bullmq": "^5.12.12",
     "compression": "^1.7.4",

@@ -162,6 +162,28 @@ export async function generateCompletionCertificate(envelopeId: string): Promise
   drawHRule(y);
   y -= LINE;
 
+  // ── Digital Signature ───────────────────────────────────────────────────────
+  drawSectionHeader('Digital Signature');
+
+  const sigLines: [string, string][] = [
+    ['Signature type:', 'PKCS#7 CMS detached signature (PDF AcroForm)'],
+    ['Standard:', 'ISO 32000 PDF digital signature'],
+    ['Algorithm:', 'SHA-256 with RSA'],
+    ['Verification:', 'Open the signed PDF in Adobe Acrobat Reader or any PDF'],
+    ['', 'validator — the signature panel will show signer identity'],
+    ['', 'and integrity status.'],
+    ['Certificate authority:', 'Self-signed (internal CA). PDF readers will show'],
+    ['', '"unknown authority" — this is expected behavior.'],
+  ];
+  for (const [label, value] of sigLines) {
+    if (label) page.drawText(label, { x: MARGIN, y, size: 8, font: boldFont, color: gray });
+    page.drawText(value, { x: MARGIN + 110, y, size: 8, font, color: black, maxWidth: PAGE_W - MARGIN - 110 - 10 });
+    y -= LINE - 1;
+  }
+  y -= LINE * 0.5;
+  drawHRule(y);
+  y -= LINE;
+
   // ── Signing Details ─────────────────────────────────────────────────────────
   drawSectionHeader('Signing Details');
 
