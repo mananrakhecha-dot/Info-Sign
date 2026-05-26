@@ -264,7 +264,7 @@ export async function completeSigningCeremony(
       generateCompletionCertificate(payload.envelopeId).catch(err =>
         console.error('[CertGen] Certificate generation failed', { envelopeId: payload.envelopeId, err })
       );
-    }).catch(() => {});
+    }).catch(err => console.error('[CertGen] Module load failed', err));
 
     // Queue completion emails and CoC
     const { rows: allRecipients } = await query<any>(
