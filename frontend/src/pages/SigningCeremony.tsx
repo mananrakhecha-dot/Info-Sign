@@ -37,7 +37,15 @@ export function SigningCeremony() {
       })
       .catch(err => {
         setStep('error');
-        setErrorMsg(err.response?.data?.error || 'Failed to load signing session');
+        const status = err.response?.status;
+        const msg = err.response?.data?.error;
+        if (status === 410 || status === 401) {
+          setErrorMsg('This signing link is invalid or has expired. Please ask the sender for a new link.');
+        } else if (status === 409) {
+          setStep('already-signed');
+        } else {
+          setErrorMsg(msg || 'Failed to load signing session. Please try again.');
+        }
       });
   }, [token]);
 
@@ -64,10 +72,14 @@ export function SigningCeremony() {
       await signingApi.complete(token, signatureData, otpRequired ? otpCode : undefined);
       setStep('done');
     } catch (err: any) {
+      const status = err.response?.status;
       const msg = err.response?.data?.error || 'Signing failed';
-      if (msg.includes('OTP') || msg.includes('AES')) {
+      if (status === 410 || status === 401) {
+        setStep('error');
+        setErrorMsg('This signing link is invalid or has expired. Please ask the sender for a new link.');
+      } else if (msg.includes('OTP') || msg.includes('AES')) {
         setOtpRequired(true);
-        toast.error('Please enter OTP to complete AES signing');
+        toast.error('Please enter your OTP code to complete signing');
       } else {
         toast.error(msg);
       }

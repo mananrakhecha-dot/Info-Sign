@@ -19,7 +19,7 @@ export function decodeSigningToken(token: string): SigningTokenPayload {
   try {
     return jwt.verify(token, process.env.SIGNING_LINK_SECRET!) as SigningTokenPayload;
   } catch {
-    throw new AppError('Invalid or expired signing link', 401);
+    throw new AppError('Invalid or expired signing link', 410);
   }
 }
 

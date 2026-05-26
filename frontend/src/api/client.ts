@@ -32,7 +32,11 @@ api.interceptors.response.use(
   async (error: AxiosError) => {
     const original = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
 
-    if (error.response?.status === 401 && !original._retry && !original.url?.includes('/auth/refresh')) {
+    // Skip auth-refresh logic for signing-ceremony endpoints — they use a
+    // different JWT (signing link token) and the signer may not be logged in.
+    const isSigning = original.url?.startsWith('/sign/');
+
+    if (error.response?.status === 401 && !original._retry && !original.url?.includes('/auth/refresh') && !isSigning) {
       if (isRefreshing) {
         return new Promise((resolve) => {
           refreshQueue.push((token) => {
