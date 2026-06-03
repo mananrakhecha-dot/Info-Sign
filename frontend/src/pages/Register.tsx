@@ -9,15 +9,13 @@ export function Register() {
   const [edisclosure, setEdisclosure] = useState(false);
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
-  const [verifyUrl, setVerifyUrl] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!edisclosure) { toast.error('You must accept the eDisclosure to register'); return; }
     setLoading(true);
     try {
-      const res = await authApi.register(form.email, form.password, form.full_name, edisclosure);
-      setVerifyUrl(res.data.verifyUrl || null);
+      await authApi.register(form.email, form.password, form.full_name, edisclosure);
       setDone(true);
     } catch (err: any) {
       toast.error(err.response?.data?.error || 'Registration failed');
@@ -37,12 +35,6 @@ export function Register() {
           </div>
           <h2 className="text-xl font-bold text-gray-900 mb-2">Check your email</h2>
           <p className="text-gray-500 mb-4">We sent a verification link to <strong>{form.email}</strong>. Click it to activate your account.</p>
-          {verifyUrl && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4 text-left">
-              <p className="text-xs font-semibold text-blue-700 mb-2">Development mode — click to verify:</p>
-              <a href={verifyUrl} className="text-xs text-blue-600 underline break-all hover:text-blue-800">{verifyUrl}</a>
-            </div>
-          )}
           <Link to="/login" className="btn-primary w-full justify-center">Back to Login</Link>
         </div>
       </div>

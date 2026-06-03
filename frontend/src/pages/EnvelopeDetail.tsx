@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Layout } from '../components/Layout';
 import { StatusBadge } from '../components/StatusBadge';
-import { Timeline } from '../components/Timeline';
+import { AuditTimeline } from '../components/AuditTimeline';
 import { TrustIndicator } from '../components/TrustIndicator';
 import { envelopeApi, EnvelopeDetail as EnvDetail } from '../api/envelopes';
 import { useSocket } from '../hooks/useSocket';
@@ -16,6 +16,31 @@ export function EnvelopeDetail() {
   const [loading, setLoading] = useState(true);
   const [voidReason, setVoidReason] = useState('');
   const [showVoid, setShowVoid] = useState(false);
+
+  const triggerDownload = (buffer: ArrayBuffer, filename: string) => {
+    const blob = new Blob([buffer], { type: 'application/pdf' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleDownloadPdf = async () => {
+  if (!id) return;
+  try {
+    const res = await envelopeApi.downloadPdf(id);
+    triggerDownload(res.data as ArrayBuffer, `${envelope?.subject || 'document'}.pdf`);
+  } catch { toast.error('Failed to download PDF'); }
+};
+  const handleDownloadCertificate = async () => {
+    if (!id) return;
+    try {
+      const res = await envelopeApi.downloadCertificate(id);
+      triggerDownload(res.data as ArrayBuffer, `certificate-${id}.pdf`);
+    } catch { toast.error('Certificate not available yet'); }
+  };
 
   const fetchData = async () => {
     if (!id) return;
@@ -74,8 +99,8 @@ export function EnvelopeDetail() {
           <div className="flex gap-2 flex-shrink-0">
             {envelope.status === 'COMPLETED' && (
               <>
-                <a href={envelopeApi.downloadUrl(id!)} className="btn-secondary text-sm">⬇ Download PDF</a>
-                <a href={envelopeApi.certificateUrl(id!)} className="btn-primary text-sm">📜 Certificate</a>
+                <button onClick={handleDownloadPdf} className="btn-secondary text-sm">⬇ Download PDF</button>
+                <button onClick={handleDownloadCertificate} className="btn-primary text-sm">📜 Certificate</button>
               </>
             )}
             {['DRAFT', 'SENT', 'DELIVERED'].includes(envelope.status) && (
@@ -98,9 +123,9 @@ export function EnvelopeDetail() {
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Left: Recipients */}
-          <div className="lg:col-span-2 space-y-4">
+          <div className="space-y-4">
             <div className="card">
               <h2 className="font-semibold text-gray-900 mb-4">Recipients</h2>
               <div className="space-y-3">
@@ -159,13 +184,12 @@ export function EnvelopeDetail() {
             </div>
           </div>
 
-          {/* Right: Timeline */}
-          <div className="card">
-            <h2 className="font-semibold text-gray-900 mb-4">Audit Trail</h2>
-            <Timeline events={events} />
-          </div>
+          {/* Right: Audit Trail */}
+          <AuditTimeline events={events} loading={loading} />
         </div>
       </div>
     </Layout>
   );
 }
+
+

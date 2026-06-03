@@ -1,10 +1,17 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Draggable from 'react-draggable';
+import { Document, Page, pdfjs } from 'react-pdf';
 import { envelopeApi, SignatureField } from '../api/envelopes';
 import { Layout } from '../components/Layout';
 import { SignatureCaptureModal } from '../components/SignatureCaptureModal';
 import toast from 'react-hot-toast';
+
+// PDF.js worker — required by react-pdf
+pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+  'pdfjs-dist/build/pdf.worker.min.mjs',
+  import.meta.url
+).toString();
 
 type WizardStep = 'upload' | 'recipients' | 'fields' | 'review';
 
@@ -38,18 +45,20 @@ export function NewEnvelope() {
   const [subject, setSubject] = useState('');
   const [message, setMessage] = useState('');
   const [pdfFile, setPdfFile] = useState<File | null>(null);
-  const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
   const [envelopeId, setEnvelopeId] = useState('');
   const [documentId, setDocumentId] = useState('');
   const [pageCount, setPageCount] = useState(0);
+  const [pdfPageWidth, setPdfPageWidth] = useState(600);
 
-  // Create a local blob URL for the PDF so we can render it during field placement
+  // Measure the PDF canvas container so react-pdf fills it correctly
   useEffect(() => {
-    if (!pdfFile) { setPdfBlobUrl(null); return; }
-    const url = URL.createObjectURL(pdfFile);
-    setPdfBlobUrl(url);
-    return () => URL.revokeObjectURL(url);
-  }, [pdfFile]);
+    const measure = () => {
+      if (pageRef.current) setPdfPageWidth(pageRef.current.clientWidth - 4);
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, []);
 
   // Recipients step
   const [recipients, setRecipients] = useState<RecipientForm[]>([
@@ -89,8 +98,10 @@ export function NewEnvelope() {
 
   // Save recipients
   const handleSaveRecipients = async () => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     for (const r of recipients) {
       if (!r.email || !r.full_name) { toast.error('All recipient fields required'); return; }
+      if (!emailRegex.test(r.email)) { toast.error(`Invalid email address: ${r.email}`); return; }
     }
     setLoading(true);
     try {
@@ -326,16 +337,30 @@ export function NewEnvelope() {
               <div className="text-xs text-gray-500 mb-2">Fields on page {activePage}: {fields.filter(f => f.page_number === activePage).length}</div>
 
               {/* PDF canvas with real document */}
-              <div ref={pageRef} className="relative bg-white border-2 border-gray-300 rounded-lg overflow-hidden"
-                style={{ width: '100%', height: '800px' }}>
+              <div ref={pageRef} className="relative bg-gray-100 border-2 border-gray-300 rounded-lg overflow-auto"
+                style={{ width: '100%', minHeight: '800px' }}>
                 {/* PDF rendered behind the draggable fields */}
-                {pdfBlobUrl ? (
-                  <iframe
-                    src={`${pdfBlobUrl}#page=${activePage}&toolbar=0&navpanes=0`}
-                    className="absolute inset-0 w-full h-full"
-                    style={{ border: 'none', pointerEvents: 'none' }}
-                    title={`Document page ${activePage}`}
-                  />
+                {pdfFile ? (
+                  <Document
+                    file={pdfFile}
+                    loading={
+                      <div className="flex items-center justify-center" style={{ height: '800px' }}>
+                        <div className="w-8 h-8 border-4 border-brand-600 border-t-transparent rounded-full animate-spin" />
+                      </div>
+                    }
+                    error={
+                      <div className="flex items-center justify-center text-red-400 text-sm" style={{ height: '800px' }}>
+                        Failed to load PDF preview
+                      </div>
+                    }
+                  >
+                    <Page
+                      pageNumber={activePage}
+                      width={pdfPageWidth}
+                      renderTextLayer={false}
+                      renderAnnotationLayer={false}
+                    />
+                  </Document>
                 ) : (
                   <div className="absolute inset-0 flex items-center justify-center text-gray-200">
                     <div className="text-center">
@@ -369,6 +394,10 @@ export function NewEnvelope() {
                       </div>
                       {field.preview_data ? (
                         <img src={field.preview_data} alt="sig" className="w-full object-contain" style={{ maxHeight: '60%' }} />
+                      ) : field.field_type === 'date' ? (
+                        <div className="text-gray-600 truncate" style={{ fontSize: '9px' }}>
+                          {new Date().toLocaleDateString('en-IN')}
+                        </div>
                       ) : (
                         <div className="text-gray-400 truncate" style={{ fontSize: '9px' }}>
                           R{field.recipient_index + 1}: {recipients[field.recipient_index]?.full_name?.split(' ')[0] || '?'}

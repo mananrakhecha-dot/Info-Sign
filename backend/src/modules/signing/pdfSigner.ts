@@ -1,8 +1,9 @@
-import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
-import { pdflibAddPlaceholder } from '@signpdf/placeholder-pdf-lib';
-import { SignPdf } from '@signpdf/signpdf';
-import { P12Signer } from '@signpdf/signer-p12';
-import forge from 'node-forge';
+import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
+import { pdflibAddPlaceholder } from "@signpdf/placeholder-pdf-lib";
+import { SignPdf } from "@signpdf/signpdf";
+import { P12Signer } from "@signpdf/signer-p12";
+import forge from "node-forge";
+import { createHash } from "crypto";
 
 /*
  * PDF Digital Signing — Implementation Notes
@@ -34,6 +35,17 @@ export interface SignatureAppearance {
   reason?: string;
 }
 
+/**
+ * Appearance metadata used by applyPkcs7Signature — a subset of
+ * SignatureAppearance (caName is not embedded in the CMS structure).
+ */
+export interface Pkcs7SignatureAppearance {
+  signerName: string;
+  signerEmail: string;
+  timestamp: Date;
+  reason?: string;
+}
+
 export interface SignatureField {
   pageNumber: number;
   x: number;
@@ -50,7 +62,7 @@ export async function embedSignatureIntoPDF(
   certPem: string,
   privateKeyPem: string,
   fields: SignatureField[],
-  appearance: SignatureAppearance
+  appearance: SignatureAppearance,
 ): Promise<Buffer> {
   const pdfDoc = await PDFDocument.load(pdfBuffer);
   const pages = pdfDoc.getPages();
@@ -66,29 +78,106 @@ export async function embedSignatureIntoPDF(
 
     // Convert percentage coords to absolute (Y-axis flipped: PDF origin is bottom-left)
     const absX = (field.x / 100) * pageWidth;
-    const absY = pageHeight - ((field.y / 100) * pageHeight) - (field.height / 100) * pageHeight;
+    const absY =
+      pageHeight -
+      (field.y / 100) * pageHeight -
+      (field.height / 100) * pageHeight;
     const absW = (field.width / 100) * pageWidth;
     const absH = (field.height / 100) * pageHeight;
 
-    if (field.fieldType === 'signature') {
-      drawSignatureAppearance(page, font, boldFont, absX, absY, absW, absH, appearance, field.signatureData);
-    } else if (field.fieldType === 'initials') {
-      const initials = appearance.signerName.split(' ').map(n => n[0]).join('').toUpperCase();
-      page.drawRectangle({ x: absX, y: absY, width: absW, height: absH, borderColor: rgb(0.1, 0.6, 0.1), borderWidth: 1 });
-      page.drawText(initials, { x: absX + 4, y: absY + absH / 2 - 6, size: Math.min(absH * 0.5, 14), font: boldFont, color: rgb(0.05, 0.3, 0.05) });
-    } else if (field.fieldType === 'date') {
-      const dateStr = appearance.timestamp.toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' });
-      page.drawRectangle({ x: absX, y: absY, width: absW, height: absH, borderColor: rgb(0.6, 0.6, 0.6), borderWidth: 0.5 });
-      page.drawText(dateStr, { x: absX + 4, y: absY + absH / 2 - 5, size: Math.min(absH * 0.45, 10), font, color: rgb(0.2, 0.2, 0.2) });
-    } else if (field.fieldType === 'text' && field.value) {
-      page.drawRectangle({ x: absX, y: absY, width: absW, height: absH, borderColor: rgb(0.6, 0.6, 0.6), borderWidth: 0.5 });
-      page.drawText(field.value, { x: absX + 4, y: absY + absH / 2 - 5, size: Math.min(absH * 0.45, 10), font, color: rgb(0.2, 0.2, 0.2) });
+    if (field.fieldType === "signature") {
+      await drawSignatureAppearance(
+        pdfDoc,
+        page,
+        font,
+        boldFont,
+        absX,
+        absY,
+        absW,
+        absH,
+        appearance,
+        field.signatureData,
+        certPem,
+      );
+    } else if (field.fieldType === "initials") {
+      const initials = appearance.signerName
+        .split(" ")
+        .map((n) => n[0])
+        .join("")
+        .toUpperCase();
+      page.drawRectangle({
+        x: absX,
+        y: absY,
+        width: absW,
+        height: absH,
+        borderColor: rgb(0.1, 0.6, 0.1),
+        borderWidth: 1,
+      });
+      page.drawText(initials, {
+        x: absX + 4,
+        y: absY + absH / 2 - 6,
+        size: Math.min(absH * 0.5, 14),
+        font: boldFont,
+        color: rgb(0.05, 0.3, 0.05),
+      });
+    } else if (field.fieldType === "date") {
+      let dateStr =
+        field.value && typeof field.value === "string" ? field.value : "";
+      if (!dateStr) {
+        const d = appearance.timestamp;
+        const months = [
+          "Jan",
+          "Feb",
+          "Mar",
+          "Apr",
+          "May",
+          "Jun",
+          "Jul",
+          "Aug",
+          "Sep",
+          "Oct",
+          "Nov",
+          "Dec",
+        ];
+        dateStr = `${String(d.getDate()).padStart(2, "0")} ${months[d.getMonth()]} ${d.getFullYear()}`;
+      }
+      page.drawRectangle({
+        x: absX,
+        y: absY,
+        width: absW,
+        height: absH,
+        borderColor: rgb(0.6, 0.6, 0.6),
+        borderWidth: 0.5,
+      });
+      page.drawText(dateStr, {
+        x: absX + 4,
+        y: absY + absH / 2 - 5,
+        size: Math.min(absH * 0.45, 10),
+        font,
+        color: rgb(0.2, 0.2, 0.2),
+      });
+    } else if (field.fieldType === "text" && field.value) {
+      page.drawRectangle({
+        x: absX,
+        y: absY,
+        width: absW,
+        height: absH,
+        borderColor: rgb(0.6, 0.6, 0.6),
+        borderWidth: 0.5,
+      });
+      page.drawText(field.value, {
+        x: absX + 4,
+        y: absY + absH / 2 - 5,
+        size: Math.min(absH * 0.45, 10),
+        font,
+        color: rgb(0.2, 0.2, 0.2),
+      });
     }
   }
 
   // ── PDF metadata ────────────────────────────────────────────────────────────
   pdfDoc.setSubject(`Digitally signed by ${appearance.signerName}`);
-  pdfDoc.setProducer('DocuSign Internal CA');
+  pdfDoc.setProducer("DocuSign Internal CA");
   pdfDoc.setCreationDate(appearance.timestamp);
   pdfDoc.setModificationDate(appearance.timestamp);
 
@@ -100,7 +189,7 @@ export async function embedSignatureIntoPDF(
     reason: `Signed by ${appearance.signerName}`,
     contactInfo: appearance.signerEmail,
     name: appearance.signerName,
-    location: 'DocuSign App',
+    location: "DocuSign App",
   });
 
   // 2. Serialise PDF with placeholder (useObjectStreams: false required by @signpdf)
@@ -112,60 +201,320 @@ export async function embedSignatureIntoPDF(
   const p12Asn1 = forge.pkcs12.toPkcs12Asn1(
     privateKey as forge.pki.rsa.PrivateKey,
     [certificate],
-    '',
-    { algorithm: '3des' }
+    "",
+    { algorithm: "3des" },
   );
-  const p12Buffer = Buffer.from(forge.asn1.toDer(p12Asn1).getBytes(), 'binary');
+  const p12Buffer = Buffer.from(forge.asn1.toDer(p12Asn1).getBytes(), "binary");
 
   // 4. Inject PKCS#7 CMS signature into /Contents (ISO 32000 §12.8)
-  const signer = new P12Signer(p12Buffer, { passphrase: '' });
+  const signer = new P12Signer(p12Buffer, { passphrase: "" });
   const signpdf = new SignPdf();
-  const signedPdfBuffer = await signpdf.sign(Buffer.from(pdfWithPlaceholder), signer);
+  const signedPdfBuffer = await signpdf.sign(
+    Buffer.from(pdfWithPlaceholder),
+    signer,
+  );
 
   return signedPdfBuffer;
 }
 
-function drawSignatureAppearance(
+/**
+ * Draws all visual signature stamps onto the PDF without applying any
+ * cryptographic signature (no PKCS#7, no AcroForm placeholder).
+ *
+ * Used exclusively for MULTI-signer envelopes where each intermediate
+ * signer's ceremony only needs to embed their visual stamp. The Platform
+ * Intermediate CA applies the single final PKCS#7 after all recipients
+ * have signed (in the cocQueue worker).
+ *
+ * The function signature deliberately matches embedSignatureIntoPDF
+ * (same first four parameters) so signingService.ts can call either
+ * function with identical arguments.
+ *
+ * @param pdfBuffer  The current PDF bytes (may already contain previous
+ *                   signers' visual stamps from earlier ceremonies).
+ * @param certPem    The signer's leaf certificate PEM — used only to render
+ *                   the cert fingerprint inside the signature box.
+ * @param fields     Signature fields assigned to this recipient.
+ * @param appearance Signer identity and timestamp for the visual stamp.
+ * @returns          PDF buffer with this signer's visual stamp added.
+ *                   No /Sig AcroForm field, no /ByteRange, no /Contents.
+ */
+export async function drawVisualSignatureOnly(
+  pdfBuffer: Buffer,
+  certPem: string,
+  fields: SignatureField[],
+  appearance: SignatureAppearance,
+): Promise<Buffer> {
+  const pdfDoc = await PDFDocument.load(pdfBuffer);
+  const pages = pdfDoc.getPages();
+  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+  // ── Visual layer — identical to embedSignatureIntoPDF ──────────────────────
+  for (const field of fields) {
+    const pageIndex = field.pageNumber - 1;
+    if (pageIndex < 0 || pageIndex >= pages.length) continue;
+    const page = pages[pageIndex];
+    const { width: pageWidth, height: pageHeight } = page.getSize();
+
+    // Convert percentage coords to absolute (Y-axis flipped: PDF origin is bottom-left)
+    const absX = (field.x / 100) * pageWidth;
+    const absY =
+      pageHeight -
+      (field.y / 100) * pageHeight -
+      (field.height / 100) * pageHeight;
+    const absW = (field.width / 100) * pageWidth;
+    const absH = (field.height / 100) * pageHeight;
+
+    if (field.fieldType === "signature") {
+      await drawSignatureAppearance(
+        pdfDoc,
+        page,
+        font,
+        boldFont,
+        absX,
+        absY,
+        absW,
+        absH,
+        appearance,
+        field.signatureData,
+        certPem,
+      );
+    } else if (field.fieldType === "initials") {
+      const initials = appearance.signerName
+        .split(" ")
+        .map((n) => n[0])
+        .join("")
+        .toUpperCase();
+      page.drawRectangle({
+        x: absX,
+        y: absY,
+        width: absW,
+        height: absH,
+        borderColor: rgb(0.1, 0.6, 0.1),
+        borderWidth: 1,
+      });
+      page.drawText(initials, {
+        x: absX + 4,
+        y: absY + absH / 2 - 6,
+        size: Math.min(absH * 0.5, 14),
+        font: boldFont,
+        color: rgb(0.05, 0.3, 0.05),
+      });
+    } else if (field.fieldType === "date") {
+      let dateStr =
+        field.value && typeof field.value === "string" ? field.value : "";
+      if (!dateStr) {
+        const d = appearance.timestamp;
+        const months = [
+          "Jan",
+          "Feb",
+          "Mar",
+          "Apr",
+          "May",
+          "Jun",
+          "Jul",
+          "Aug",
+          "Sep",
+          "Oct",
+          "Nov",
+          "Dec",
+        ];
+        dateStr = `${String(d.getDate()).padStart(2, "0")} ${months[d.getMonth()]} ${d.getFullYear()}`;
+      }
+      page.drawRectangle({
+        x: absX,
+        y: absY,
+        width: absW,
+        height: absH,
+        borderColor: rgb(0.6, 0.6, 0.6),
+        borderWidth: 0.5,
+      });
+      page.drawText(dateStr, {
+        x: absX + 4,
+        y: absY + absH / 2 - 5,
+        size: Math.min(absH * 0.45, 10),
+        font,
+        color: rgb(0.2, 0.2, 0.2),
+      });
+    } else if (field.fieldType === "text" && field.value) {
+      page.drawRectangle({
+        x: absX,
+        y: absY,
+        width: absW,
+        height: absH,
+        borderColor: rgb(0.6, 0.6, 0.6),
+        borderWidth: 0.5,
+      });
+      page.drawText(field.value, {
+        x: absX + 4,
+        y: absY + absH / 2 - 5,
+        size: Math.min(absH * 0.45, 10),
+        font,
+        color: rgb(0.2, 0.2, 0.2),
+      });
+    }
+  }
+
+  // ── PDF metadata ────────────────────────────────────────────────────────────
+  pdfDoc.setSubject(`Digitally signed by ${appearance.signerName}`);
+  pdfDoc.setProducer("DocuSign Internal CA");
+  pdfDoc.setCreationDate(appearance.timestamp);
+  pdfDoc.setModificationDate(appearance.timestamp);
+
+  // ── No crypto layer ─────────────────────────────────────────────────────────
+  // Deliberately stops here. No pdflibAddPlaceholder, no P12, no signpdf.sign.
+  // The Platform CA applies the single final PKCS#7 in the cocQueue worker
+  // after ALL recipients have signed.
+
+  return Buffer.from(await pdfDoc.save({ useObjectStreams: false }));
+}
+
+async function drawSignatureAppearance(
+  pdfDoc: PDFDocument,
   page: any,
   font: any,
   boldFont: any,
-  x: number, y: number, w: number, h: number,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
   appearance: SignatureAppearance,
-  signatureData?: string
-): void {
-  // Green border box
+  signatureData?: string,
+  certPem?: string,
+): Promise<void> {
+  const gray = rgb(0.35, 0.35, 0.35);
+  const darkBlue = rgb(0.05, 0.05, 0.3);
+
+  // a. White background with thin dark border
   page.drawRectangle({
-    x, y, width: w, height: h,
-    borderColor: rgb(0.07, 0.53, 0.07),
-    borderWidth: 1.5,
-    color: rgb(0.95, 1.0, 0.95),
+    x,
+    y,
+    width: w,
+    height: h,
+    borderColor: rgb(0.2, 0.2, 0.2),
+    borderWidth: 0.8,
+    color: rgb(1, 1, 1),
   });
 
-  const green = rgb(0.07, 0.53, 0.07);
-  const darkGreen = rgb(0.02, 0.35, 0.02);
-  const gray = rgb(0.4, 0.4, 0.4);
-  const fontSize = Math.min(h * 0.13, 7);
-  const padding = 4;
+  // b. "Signed by:" label at top-left
+  page.drawText("Signed by:", {
+    x: x + 4,
+    y: y + h - 9,
+    size: 6.5,
+    font,
+    color: gray,
+  });
 
-  // Green checkmark lines
-  const ckSize = Math.min(h * 0.35, 14);
-  const ckX = x + padding;
-  const ckY = y + h - ckSize - padding;
-  page.drawLine({ start: { x: ckX, y: ckY + ckSize * 0.45 }, end: { x: ckX + ckSize * 0.35, y: ckY }, color: green, thickness: 2 });
-  page.drawLine({ start: { x: ckX + ckSize * 0.35, y: ckY }, end: { x: ckX + ckSize, y: ckY + ckSize * 0.75 }, color: green, thickness: 2 });
+  // c. Signature image or name fallback
+  const imgH = Math.max(h - 28, 8);
+  const imgY = y + 12;
+  let imageEmbedded = false;
 
-  const textX = x + ckSize + padding * 2;
-  let textY = y + h - fontSize - padding;
+  if (signatureData) {
+    try {
+      let pdfImage;
+      if (signatureData.startsWith("data:image/png")) {
+        const base64 = signatureData.replace(/^data:image\/png;base64,/, "");
+        pdfImage = await pdfDoc.embedPng(Buffer.from(base64, "base64"));
+      } else if (
+        signatureData.startsWith("data:image/jpeg") ||
+        signatureData.startsWith("data:image/jpg")
+      ) {
+        const base64 = signatureData.replace(/^data:image\/jpe?g;base64,/, "");
+        pdfImage = await pdfDoc.embedJpg(Buffer.from(base64, "base64"));
+      } else {
+        // No data URI prefix — assume raw base64 PNG
+        const base64 = signatureData.includes(",")
+          ? signatureData.split(",")[1]
+          : signatureData;
+        pdfImage = await pdfDoc.embedPng(Buffer.from(base64, "base64"));
+      }
+      if (pdfImage) {
+        page.drawImage(pdfImage, {
+          x: x + 4,
+          y: imgY,
+          width: w - 8,
+          height: imgH,
+        });
+        imageEmbedded = true;
+      }
+    } catch (err) {
+      console.error("[pdfSigner] Failed to embed signature image:", err);
+    }
+  }
 
-  const nameDisplay = appearance.signerName.length > 18 ? appearance.signerName.substring(0, 16) + '..' : appearance.signerName;
-  page.drawText(`Signed by: ${nameDisplay}`, { x: textX, y: textY, size: fontSize, font: boldFont, color: darkGreen });
-  textY -= fontSize + 2;
-  page.drawText(appearance.signerEmail.substring(0, 24), { x: textX, y: textY, size: fontSize * 0.85, font, color: gray });
-  textY -= fontSize + 1;
-  page.drawText(`Date: ${appearance.timestamp.toISOString().substring(0, 10)}`, { x: textX, y: textY, size: fontSize * 0.85, font, color: gray });
-  textY -= fontSize + 1;
-  page.drawText(`CA: ${appearance.caName.substring(0, 22)}`, { x: textX, y: textY, size: fontSize * 0.8, font, color: gray });
-  textY -= fontSize + 1;
-  page.drawText('Reason: I approve this document', { x: textX, y: textY, size: fontSize * 0.8, font, color: gray });
-  page.drawText('VERIFIED', { x: x + w - 38, y: y + padding, size: 6.5, font: boldFont, color: green });
+  if (!imageEmbedded) {
+    page.drawText(appearance.signerName, {
+      x: x + 4,
+      y: y + h / 2 - 2,
+      size: Math.min(h * 0.28, 16),
+      font: boldFont,
+      color: darkBlue,
+    });
+  }
+
+  // d. Certificate fingerprint at the bottom
+  try {
+    if (certPem) {
+      const derBase64 = certPem
+        .replace(/-----BEGIN CERTIFICATE-----/g, "")
+        .replace(/-----END CERTIFICATE-----/g, "")
+        .replace(/\s+/g, "");
+      const derBuf = Buffer.from(derBase64, "base64");
+      const fp = createHash("sha1").update(derBuf).digest("hex").toUpperCase();
+      const shortFp = fp.substring(0, 15) + "...";
+      page.drawText(shortFp, {
+        x: x + 4,
+        y: y + 3,
+        size: 6.5,
+        font,
+        color: rgb(0.2, 0.2, 0.2),
+      });
+    }
+  } catch (err) {
+    console.error("[pdfSigner] Failed to draw certificate fingerprint:", err);
+  }
+}
+
+/**
+ * Applies a PKCS#7 / ISO 32000 cryptographic signature to an already-rendered
+ * PDF buffer — NO visual drawing. Stamps have already been applied by the
+ * env_meta render loop in the download handler.
+ */
+export async function applyPkcs7Signature(
+  pdfBuffer: Buffer,
+  certPem: string,
+  privateKeyPem: string,
+  appearance: Pkcs7SignatureAppearance,
+): Promise<Buffer> {
+  const pdfDoc = await PDFDocument.load(pdfBuffer);
+
+  pdfDoc.setSubject(`Digitally signed by ${appearance.signerName}`);
+  pdfDoc.setProducer("DocuSign Internal CA");
+  pdfDoc.setModificationDate(appearance.timestamp);
+
+  await pdflibAddPlaceholder({
+    pdfDoc,
+    reason: appearance.reason ?? `Signed by ${appearance.signerName}`,
+    contactInfo: appearance.signerEmail,
+    name: appearance.signerName,
+    location: "DocuSign App",
+  });
+
+  const pdfWithPlaceholder = await pdfDoc.save({ useObjectStreams: false });
+
+  const privateKey = forge.pki.privateKeyFromPem(privateKeyPem);
+  const certificate = forge.pki.certificateFromPem(certPem);
+  const p12Asn1 = forge.pkcs12.toPkcs12Asn1(
+    privateKey as forge.pki.rsa.PrivateKey,
+    [certificate],
+    "",
+    { algorithm: "3des" },
+  );
+  const p12Buffer = Buffer.from(forge.asn1.toDer(p12Asn1).getBytes(), "binary");
+
+  const p12signer = new P12Signer(p12Buffer, { passphrase: "" });
+  const signpdf = new SignPdf();
+  return signpdf.sign(Buffer.from(pdfWithPlaceholder), p12signer);
 }

@@ -24,14 +24,23 @@ export function SigningCeremony() {
     signingApi.getContext(token)
       .then(res => {
         setContext(res.data);
+        // Pre-fill date fields so the value is included in the signing payload
+        const dateFields: any[] = (res.data.fields || []).filter((f: any) => f.field_type === 'date');
+        if (dateFields.length > 0) {
+          const d = new Date();
+          const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+          const today = `${String(d.getDate()).padStart(2, '0')} ${months[d.getMonth()]} ${d.getFullYear()}`;
+          setSignatureData(prev => {
+            const updates: Record<string, string> = {};
+            dateFields.forEach((f: any) => { if (!prev[f.id]) updates[f.id] = today; });
+            return { ...prev, ...updates };
+          });
+        }
         if (res.data.recipient?.status === 'SIGNED') {
           setStep('already-signed');
         } else if (!res.data.userRecord?.edisclosure_accepted) {
           setStep('edisclosure');
-        } else if (!res.data.identityGate?.canSign) {
-          setStep('error');
-          setErrorMsg(`This document requires ${res.data.identityGate?.required} identity verification. Please complete verification first.`);
-        } else {
+        }  else {
           setStep('view');
         }
       })
@@ -295,7 +304,7 @@ export function SigningCeremony() {
                     )}
 
                     {field.field_type === 'date' && (
-                      <p className="text-sm text-gray-600">{new Date().toLocaleDateString('en-IN')}</p>
+                      <p className="text-sm text-gray-600 font-medium">{signatureData[field.id] || new Date().toLocaleDateString('en-IN')}</p>
                     )}
                   </div>
                 );
@@ -303,16 +312,6 @@ export function SigningCeremony() {
               {fields.length === 0 && (
                 <p className="text-gray-400 text-sm text-center py-4">No fields assigned to you</p>
               )}
-            </div>
-          </div>
-
-          {/* Identity info */}
-          <div className="card">
-            <h3 className="text-sm font-semibold text-gray-700 mb-2">Identity</h3>
-            <div className="text-xs space-y-1">
-              <p><span className="text-gray-500">Level:</span> <span className="font-medium text-green-700">{context?.identityGate?.current}</span></p>
-              <p><span className="text-gray-500">Required:</span> <span className="font-medium">{context?.identityGate?.required}</span></p>
-              <p><span className="text-gray-500">CA:</span> DocuSign Internal CA</p>
             </div>
           </div>
         </div>

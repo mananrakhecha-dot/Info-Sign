@@ -31,7 +31,7 @@ export async function registerUser(email: string, password: string, fullName: st
      VALUES ($1, $2, $3, $4, $5, $6, $7)
      RETURNING id, email, full_name, role, identity_level, edisclosure_accepted, phone_verified`,
     [email.toLowerCase(), passwordHash, fullName, verifyToken, verifyExpires,
-     edisclosure, edisclosure ? new Date() : null]
+      edisclosure, edisclosure ? new Date() : null]
   );
 
   return { ...rows[0], _verifyToken: verifyToken } as any;
@@ -41,10 +41,18 @@ export async function verifyEmail(token: string): Promise<void> {
   const { rows } = await query(
     `UPDATE users SET email_verified=true, identity_level=CASE WHEN edisclosure_accepted THEN 'SES' ELSE identity_level END,
      email_verify_token=NULL, updated_at=now()
-     WHERE email_verify_token=$1 AND email_verify_expires > now() RETURNING id`,
+     WHERE email_verify_token=$1 AND email_verify_expires > now() RETURNING id, email, full_name, edisclosure_accepted`,
     [token]
   );
   if (rows.length === 0) throw new AppError('Invalid or expired verification token', 400);
+
+  // Issue leaf cert immediately so signing works without requiring a login first
+  const u = rows[0] as any;
+  if (u.edisclosure_accepted) {
+    try { await issueLeafCertificate(u.id, u.email, u.full_name); } catch (e) {
+      console.error('[CA] Failed to issue cert at email verification', e);
+    }
+  }
 }
 
 export async function loginUser(email: string, password: string): Promise<{ user: User; accessToken: string; refreshToken: string }> {

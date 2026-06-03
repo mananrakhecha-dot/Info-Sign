@@ -1,0 +1,60 @@
+/* eslint-disable camelcase */
+exports.shorthands = undefined;
+
+exports.up = (pgm) => {
+  // ── Column 1: envelopes.signing_mode ──────────────────────────────────────
+  // Determines which signing flow to use for this envelope.
+  // Set once in sendEnvelope() based on recipient count — never changed again.
+  //
+  // SINGLE: 1 recipient  → recipient's own PKCS#7 applied at signing ceremony
+  // MULTI:  2+ recipients → visual stamps only at each ceremony, Platform
+  //                         Intermediate CA applies one final PKCS#7 after all
+  //                         recipients have signed (in the cocQueue worker)
+  pgm.sql(`
+    ALTER TABLE envelopes
+    ADD COLUMN IF NOT EXISTS signing_mode VARCHAR(10)
+    NOT NULL DEFAULT 'SINGLE';
+  `);
+
+  // Back-fill existing rows. All existing envelopes are treated as SINGLE
+  // because they were created before multi-signer support was added. Any
+  // already-completed multi-signer envelopes would have had the PKCS#7
+  // corruption issue and should be re-sent if needed.
+  pgm.sql(`
+    UPDATE envelopes
+    SET signing_mode = 'SINGLE'
+    WHERE signing_mode IS NULL OR signing_mode = '';
+  `);
+
+  // ── Column 2: envelope_documents.original_sha256_hash ─────────────────────
+  // Stores the SHA-256 hash of the original unsigned PDF at upload time.
+  //
+  // Unlike sha256_hash (which is overwritten after EVERY signer writes back
+  // the updated PDF), this column is set ONCE at upload and NEVER changed.
+  //
+  // Purpose: the tamper check in signingService.ts must compare the file on
+  // disk against the original document — not the previous signer's output.
+  // For SINGLE envelopes this makes no difference (only one signing pass).
+  // For MULTI envelopes this is critical: Recipient 2's tamper check must
+  // verify the underlying document content hasn't been tampered with, even
+  // though the file on disk now contains Recipient 1's visual stamp.
+  pgm.sql(`
+    ALTER TABLE envelope_documents
+    ADD COLUMN IF NOT EXISTS original_sha256_hash VARCHAR(64);
+  `);
+
+  // Back-fill: copy current sha256_hash into original_sha256_hash for all
+  // existing rows. For envelopes that have already been signed, this will be
+  // the post-sign hash rather than the true original — acceptable since those
+  // envelopes are already completed and their tamper check has already passed.
+  pgm.sql(`
+    UPDATE envelope_documents
+    SET original_sha256_hash = sha256_hash
+    WHERE original_sha256_hash IS NULL;
+  `);
+};
+
+exports.down = (pgm) => {
+  pgm.sql('ALTER TABLE envelopes DROP COLUMN IF EXISTS signing_mode;');
+  pgm.sql('ALTER TABLE envelope_documents DROP COLUMN IF EXISTS original_sha256_hash;');
+};
