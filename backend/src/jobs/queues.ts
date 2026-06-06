@@ -3,7 +3,7 @@ import { sendSigningInvitation, sendCompletionEmail } from "./emailService";
 import { generateCRL } from "../ca/crl";
 import { checkAndRenewCertificates } from "../ca/certIssuer";
 import { query } from "../db/pool";
-import { getPlatformSigningKeys } from "../ca/caStore";
+import { getIntermediateCA, getPlatformSigningKeys } from "../ca/caStore";
 
 const connection = {
   host:
@@ -21,9 +21,7 @@ export function initWorkers(): void {
   if (workersInitialized) return;
   workersInitialized = true;
 
-  // Email worker — handles signing invitations only.
-  // Completion emails are handled inside the cocQueue worker (below)
-  // so they can carry the certificate PDF as an attachment.
+  // Email worker
   new Worker(
     "email",
     async (job) => {
@@ -54,27 +52,13 @@ export function initWorkers(): void {
     { connection },
   );
 
-  // Certificate of Completion worker — single source of truth for
-  // post-completion actions. Generates the CoC PDF, then sends one
-  // professional email to every party (sender + all recipients) with
-  // both the signed PDF and the certificate attached.
+  // Certificate of Completion worker
   new Worker(
     "certificate-of-completion",
     async (job) => {
       const { envelopeId } = job.data;
 
       // ── Step 0: Platform CA PKCS#7 signing for MULTI envelopes ─────────────
-      // For MULTI envelopes: all recipients have signed with visual stamps only.
-      // The Platform Signing Certificate now applies ONE final PKCS#7 signature
-      // covering the complete document with all visual stamps present.
-      //
-      // The Platform Signing Certificate is a leaf cert issued by the
-      // Intermediate CA with keyUsage: digitalSignature + nonRepudiation.
-      // This is what Adobe Acrobat requires — CA certs (keyCertSign) are
-      // rejected for document signing.
-      //
-      // For SINGLE envelopes: the recipient's own PKCS#7 was already applied
-      // at signing ceremony time — skip this step entirely.
       const { rows: modeRows } = await query<any>(
         "SELECT signing_mode FROM envelopes WHERE id=$1",
         [envelopeId],
@@ -97,100 +81,77 @@ export function initWorkers(): void {
             const { PDFDocument } = await import("pdf-lib");
             const { pdflibAddPlaceholder } =
               await import("@signpdf/placeholder-pdf-lib");
-            const { SignPdf, Signer } = await import("@signpdf/signpdf");
+            const { SignPdf } = await import("@signpdf/signpdf");
+            const { P12Signer } = await import("@signpdf/signer-p12");
             const forge = (await import("node-forge")).default;
             const { promises: fsPromises } = await import("fs");
 
-            // a. Decrypt the visual-only PDF from disk
             const visualPdfBuffer = readFile(docRows[0].file_path, true);
 
-            // b. Get Platform Signing Certificate + key
-            //    Loaded at server startup via loader.ts → loadCA()
-            //    keyUsage: digitalSignature + nonRepudiation ✓
+            // ── FIX 2: Use pre-built Platform Signing Keys from caStore ─────────
+            // getPlatformSigningKeys() returns the leaf cert + key pair that was
+            // loaded/generated at startup in loader.ts — keyUsage: digitalSignature
+            // + nonRepudiation. This avoids the P12 rebuild bug where forge loses
+            // internal BigInteger references when packaging intCA objects together.
             const platformKeys = getPlatformSigningKeys();
-            const signerName =
+
+            if (!platformKeys) {
+              throw new Error(
+                "[CoC] Platform Signing Keys not loaded — check loader.ts startup",
+              );
+            }
+
+            const caName =
               platformKeys.cert.subject.getField("CN")?.value ||
               process.env.CA_ORG_NAME ||
               "DocuSign Platform Signer";
 
-            // c. Load PDF and add AcroForm /Sig placeholder
             const pdfDoc = await PDFDocument.load(visualPdfBuffer);
-            pdfDoc.setProducer("DocuSign Internal CA");
+            pdfDoc.setProducer("DocuSign Platform Signer");
             pdfDoc.setModificationDate(new Date());
             await pdflibAddPlaceholder({
               pdfDoc,
               reason: "All parties have signed — Platform CA seal",
               contactInfo: `ca@${process.env.APP_BASE_URL?.replace(/https?:\/\//, "") || "digsign.app"}`,
-              name: signerName,
+              name: caName,
               location: "DocuSign App",
             });
 
-            // d. Serialize PDF with placeholder
             const pdfWithPlaceholder = await pdfDoc.save({
               useObjectStreams: false,
             });
 
-            // e. Build a custom Signer that uses forge.pkcs7 directly.
-            //
-            // We extend the Signer base class from @signpdf/signpdf.
-            // SignPdf.sign() handles all ByteRange calculation and /Contents
-            // injection. It calls our signer.sign(bytesToSign) where bytesToSign
-            // is the concatenated byte ranges (all PDF bytes except /Contents).
-            // We build the CMS SignedData from those bytes and return raw DER.
-            //
-            // The Platform Signing Certificate has the correct keyUsage flags
-            // (digitalSignature + nonRepudiation) so Adobe accepts it.
-            const platformKeysRef = platformKeys;
-            const caSigner = new (class extends Signer {
-              async sign(
-                pdfBuffer: Buffer,
-                signingTime?: Date,
-              ): Promise<Buffer> {
-                const p7 = forge.pkcs7.createSignedData();
-                p7.content = forge.util.createBuffer(
-                  pdfBuffer.toString("binary"),
-                );
-                p7.addCertificate(platformKeysRef.cert);
-                p7.addSigner({
-                  key: platformKeysRef.privateKey,
-                  certificate: platformKeysRef.cert,
-                  digestAlgorithm: forge.pki.oids.sha256,
-                  authenticatedAttributes: [
-                    {
-                      type: forge.pki.oids.contentType,
-                      value: forge.pki.oids.data,
-                    },
-                    {
-                      type: forge.pki.oids.signingTime,
-                      value: (signingTime ?? new Date()) as any,
-                    },
-                    {
-                      type: forge.pki.oids.messageDigest,
-                    },
-                  ],
-                });
-                p7.sign({ detached: true });
-                return Buffer.from(
-                  forge.asn1.toDer(p7.toAsn1()).getBytes(),
-                  "binary",
-                );
-              }
-            })();
+            // ── FIX 2: Build P12 from platformKeys (leaf cert + leaf key) ──────
+            // Previously used intCA.privateKey + intCA.cert (CA cert) which caused
+            // "Failed to find a certificate that matches the private key" because
+            // the CA cert has keyUsage: keyCertSign, not digitalSignature.
+            // Now we use the dedicated Platform Signing Certificate (leaf cert)
+            // which has keyUsage: digitalSignature + nonRepudiation — correct for
+            // document signing. The P12 is built fresh from the already-loaded
+            // forge objects, so no BigInteger reference loss.
+            const p12Asn1 = forge.pkcs12.toPkcs12Asn1(
+              platformKeys.privateKey as any,
+              [platformKeys.cert],
+              "",
+              { algorithm: "3des" },
+            );
+            const p12Buffer = Buffer.from(
+              forge.asn1.toDer(p12Asn1).getBytes(),
+              "binary",
+            );
 
-            // f. Inject PKCS#7 into the PDF via SignPdf
+            const signer = new P12Signer(p12Buffer, { passphrase: "" });
             const signpdf = new SignPdf();
             const caSignedPdf = await signpdf.sign(
               Buffer.from(pdfWithPlaceholder),
-              caSigner,
+              signer,
             );
 
-            // g. Write signed PDF back to disk (encrypted)
             await fsPromises.writeFile(
               docRows[0].file_path,
               encryptFile(caSignedPdf),
             );
 
-            // h. Update sha256_hash to reflect the final signed PDF
             const finalHash = computeSHA256(caSignedPdf);
             await query(
               "UPDATE envelope_documents SET sha256_hash=$1 WHERE id=$2",
@@ -198,7 +159,7 @@ export function initWorkers(): void {
             );
 
             console.log(
-              `[CoC] Platform signing certificate PKCS#7 applied for MULTI envelope ${envelopeId}`,
+              `[CoC] Platform CA PKCS#7 applied for MULTI envelope ${envelopeId}`,
             );
           }
         } catch (err) {
@@ -213,6 +174,53 @@ export function initWorkers(): void {
       const { generateCertificateOfCompletion } =
         await import("../modules/completion/completionService");
       const certBuffer = await generateCertificateOfCompletion(envelopeId);
+
+      // ── Step 1b: Save certificate to disk + record in DB ────────────────────
+      if (certBuffer) {
+        try {
+          const { saveFile } = await import("../modules/storage");
+          const certFileName = `certificate-${envelopeId}.pdf`;
+          const certPath = saveFile(
+            "documents",
+            certFileName,
+            certBuffer,
+            true,
+          );
+
+          const { rows: existingCert } = await query<any>(
+            `SELECT id FROM envelope_documents
+             WHERE envelope_id=$1 AND document_type='certificate' LIMIT 1`,
+            [envelopeId],
+          );
+          if (existingCert.length === 0) {
+            await query(
+              `INSERT INTO envelope_documents
+               (envelope_id, file_name, file_path, sha256_hash, document_type, page_count)
+               VALUES ($1, $2, $3, $4, 'certificate', 1)`,
+              [envelopeId, certFileName, certPath, certFileName],
+            );
+          } else {
+            await query(
+              `UPDATE envelope_documents
+               SET file_path=$1, file_name=$2
+               WHERE envelope_id=$3 AND document_type='certificate'`,
+              [certPath, certFileName, envelopeId],
+            );
+          }
+
+          await query(
+            `UPDATE envelopes SET completion_cert_path=$1 WHERE id=$2`,
+            [certPath, envelopeId],
+          );
+
+          console.log(`[CoC] Certificate saved to disk: ${certPath}`);
+        } catch (certSaveErr) {
+          console.error(
+            `[CoC] Failed to save certificate to disk:`,
+            certSaveErr,
+          );
+        }
+      }
 
       // ── Step 2: Load the signed PDF from disk ───────────────────────────────
       const { readFile } = await import("../modules/storage");
@@ -254,7 +262,7 @@ export function initWorkers(): void {
         everyone.push(senderEntry);
       }
 
-      // ── Step 4: Send one email per person with both attachments ─────────────
+      // ── Step 4: Send completion email to everyone ────────────────────────────
       for (const person of everyone) {
         if (!person.user_email) continue;
         try {

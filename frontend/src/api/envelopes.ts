@@ -62,6 +62,9 @@ export interface SignatureField {
 
 export const envelopeApi = {
   list: () => api.get<Envelope[]>("/envelopes"),
+  delete: (id: string) => api.delete(`/envelopes/${id}`),
+  update: (id: string, data: { subject?: string; message?: string }) =>
+    api.patch(`/envelopes/${id}`, data),
 
   create: (formData: FormData) =>
     api.post<{ envelopeId: string; documentId: string; pageCount: number }>(
@@ -89,14 +92,9 @@ export const envelopeApi = {
 
   status: (id: string) => api.get(`/envelopes/${id}/status`),
 
-  downloadPdf: (id: string, preview = false) =>
-    api.get(`/envelopes/${id}/download`, {
-      params: preview ? { preview: "true" } : undefined,
-      responseType: "arraybuffer",
-    }),
+  downloadUrl: (id: string) => `/api/envelopes/${id}/download`,
 
-  downloadCertificate: (id: string) =>
-    api.get(`/envelopes/${id}/certificate`, { responseType: "arraybuffer" }),
+  certificateUrl: (id: string) => `/api/envelopes/${id}/certificate`,
 };
 
 export const signingApi = {

@@ -2,11 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Layout } from '../components/Layout';
 import { StatusBadge } from '../components/StatusBadge';
-import { AuditTimeline } from '../components/AuditTimeline';
+import { Timeline } from '../components/Timeline';
 import { TrustIndicator } from '../components/TrustIndicator';
 import { envelopeApi, EnvelopeDetail as EnvDetail } from '../api/envelopes';
 import { useSocket } from '../hooks/useSocket';
 import toast from 'react-hot-toast';
+import api from '../api/client';
 
 export function EnvelopeDetail() {
   const { id } = useParams<{ id: string }>();
@@ -16,31 +17,8 @@ export function EnvelopeDetail() {
   const [loading, setLoading] = useState(true);
   const [voidReason, setVoidReason] = useState('');
   const [showVoid, setShowVoid] = useState(false);
-
-  const triggerDownload = (buffer: ArrayBuffer, filename: string) => {
-    const blob = new Blob([buffer], { type: 'application/pdf' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const handleDownloadPdf = async () => {
-  if (!id) return;
-  try {
-    const res = await envelopeApi.downloadPdf(id);
-    triggerDownload(res.data as ArrayBuffer, `${envelope?.subject || 'document'}.pdf`);
-  } catch { toast.error('Failed to download PDF'); }
-};
-  const handleDownloadCertificate = async () => {
-    if (!id) return;
-    try {
-      const res = await envelopeApi.downloadCertificate(id);
-      triggerDownload(res.data as ArrayBuffer, `certificate-${id}.pdf`);
-    } catch { toast.error('Certificate not available yet'); }
-  };
+  const [downloading, setDownloading] = useState(false);
+  const [downloadingCert, setDownloadingCert] = useState(false);
 
   const fetchData = async () => {
     if (!id) return;
@@ -65,6 +43,42 @@ export function EnvelopeDetail() {
     return () => { off1(); off2(); };
   }, [id]);
 
+  // ── Authenticated file download ───────────────────────────────────────────
+  // Using <a href> directly fails because it doesn't send the Authorization
+  // header — requireAuth middleware rejects the request with 401.
+  // Instead we fetch via axios (which attaches the token) then trigger a
+  // browser download from the blob.
+  const downloadFile = async (type: 'pdf' | 'certificate') => {
+    if (!id) return;
+    const isCert = type === 'certificate';
+    if (isCert) setDownloadingCert(true); else setDownloading(true);
+    try {
+      const url = isCert
+        ? `/envelopes/${id}/certificate`
+        : `/envelopes/${id}/download`;
+      const res = await api.get(url, { responseType: 'blob' });
+      const blob = new Blob([res.data], { type: 'application/pdf' });
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = objectUrl;
+      a.download = isCert
+        ? `certificate-${id}.pdf`
+        : `${envelope?.subject || 'document'}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(objectUrl);
+      toast.success(isCert ? 'Certificate downloaded' : 'PDF downloaded');
+    } catch (err: any) {
+      const msg = err.response?.status === 404
+        ? isCert ? 'Certificate not available yet' : 'Document not found'
+        : 'Download failed';
+      toast.error(msg);
+    } finally {
+      if (isCert) setDownloadingCert(false); else setDownloading(false);
+    }
+  };
+
   const handleVoid = async () => {
     if (!id || !voidReason) return;
     try {
@@ -78,7 +92,7 @@ export function EnvelopeDetail() {
   if (loading) return <Layout><div className="text-center py-16 text-gray-400">Loading...</div></Layout>;
   if (!envelope) return <Layout><div className="text-center py-16 text-gray-400">Envelope not found</div></Layout>;
 
-  const intCA = 'DocuSign Internal CA'; // Could fetch from server
+  const intCA = 'DocuSign Internal CA';
 
   return (
     <Layout>
@@ -99,8 +113,20 @@ export function EnvelopeDetail() {
           <div className="flex gap-2 flex-shrink-0">
             {envelope.status === 'COMPLETED' && (
               <>
-                <button onClick={handleDownloadPdf} className="btn-secondary text-sm">⬇ Download PDF</button>
-                <button onClick={handleDownloadCertificate} className="btn-primary text-sm">📜 Certificate</button>
+                <button
+                  onClick={() => downloadFile('pdf')}
+                  disabled={downloading}
+                  className="btn-secondary text-sm"
+                >
+                  {downloading ? 'Downloading...' : '⬇ Download PDF'}
+                </button>
+                <button
+                  onClick={() => downloadFile('certificate')}
+                  disabled={downloadingCert}
+                  className="btn-primary text-sm"
+                >
+                  {downloadingCert ? 'Downloading...' : '📜 Certificate'}
+                </button>
               </>
             )}
             {['DRAFT', 'SENT', 'DELIVERED'].includes(envelope.status) && (
@@ -123,9 +149,9 @@ export function EnvelopeDetail() {
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left: Recipients */}
-          <div className="space-y-4">
+          <div className="lg:col-span-2 space-y-4">
             <div className="card">
               <h2 className="font-semibold text-gray-900 mb-4">Recipients</h2>
               <div className="space-y-3">
@@ -184,12 +210,13 @@ export function EnvelopeDetail() {
             </div>
           </div>
 
-          {/* Right: Audit Trail */}
-          <AuditTimeline events={events} loading={loading} />
+          {/* Right: Timeline */}
+          <div className="card">
+            <h2 className="font-semibold text-gray-900 mb-4">Audit Trail</h2>
+            <Timeline events={events} />
+          </div>
         </div>
       </div>
     </Layout>
   );
 }
-
-

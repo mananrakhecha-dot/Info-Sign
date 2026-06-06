@@ -7,7 +7,6 @@ import { Layout } from '../components/Layout';
 import { SignatureCaptureModal } from '../components/SignatureCaptureModal';
 import toast from 'react-hot-toast';
 
-// PDF.js worker — required by react-pdf
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
   'pdfjs-dist/build/pdf.worker.min.mjs',
   import.meta.url
@@ -34,7 +33,19 @@ interface FieldOnPage {
   preview_data?: string | null;
 }
 
-const FIELD_COLORS = ['border-blue-400 bg-blue-50', 'border-purple-400 bg-purple-50', 'border-orange-400 bg-orange-50', 'border-pink-400 bg-pink-50'];
+const FIELD_COLORS = [
+  'border-blue-400 bg-blue-50 text-blue-700',
+  'border-purple-400 bg-purple-50 text-purple-700',
+  'border-orange-400 bg-orange-50 text-orange-700',
+  'border-pink-400 bg-pink-50 text-pink-700',
+];
+
+const RECIPIENT_BADGE_COLORS = [
+  'bg-blue-100 text-blue-700 border-blue-300',
+  'bg-purple-100 text-purple-700 border-purple-300',
+  'bg-orange-100 text-orange-700 border-orange-300',
+  'bg-pink-100 text-pink-700 border-pink-300',
+];
 
 export function NewEnvelope() {
   const navigate = useNavigate();
@@ -50,7 +61,6 @@ export function NewEnvelope() {
   const [pageCount, setPageCount] = useState(0);
   const [pdfPageWidth, setPdfPageWidth] = useState(600);
 
-  // Measure the PDF canvas container so react-pdf fills it correctly
   useEffect(() => {
     const measure = () => {
       if (pageRef.current) setPdfPageWidth(pageRef.current.clientWidth - 4);
@@ -75,6 +85,11 @@ export function NewEnvelope() {
   // Signature capture modal
   const [captureModalOpen, setCaptureModalOpen] = useState(false);
   const pendingFieldRef = useRef<Omit<FieldOnPage, 'preview_data'> | null>(null);
+
+  // ── FIX 1: Compute which recipients have no fields assigned ──────────────
+  const recipientsWithNoFields = recipients
+    .map((r, i) => ({ index: i, name: r.full_name || `Recipient ${i + 1}` }))
+    .filter(r => !fields.some(f => f.recipient_index === r.index));
 
   // Upload + create envelope
   const handleUpload = async () => {
@@ -113,7 +128,7 @@ export function NewEnvelope() {
     } finally { setLoading(false); }
   };
 
-  // Add field — opens capture modal for signature/initials, places directly for others
+  // Add field
   const addField = useCallback(() => {
     const base: Omit<FieldOnPage, 'preview_data'> = {
       id: `field-${Date.now()}`,
@@ -130,27 +145,42 @@ export function NewEnvelope() {
       setCaptureModalOpen(true);
     } else {
       setFields(f => [...f, { ...base, preview_data: null }]);
+      // ── FIX 1: Auto-cycle to next recipient after placing a field ──────────
+      if (recipients.length > 1) {
+        setActiveRecipient(prev => (prev + 1) % recipients.length);
+      }
     }
-  }, [activeFieldType, activeRecipient, activePage]);
+  }, [activeFieldType, activeRecipient, activePage, recipients.length]);
 
   const handleCaptureConfirm = useCallback((base64: string) => {
     if (!pendingFieldRef.current) return;
     setFields(f => [...f, { ...pendingFieldRef.current!, preview_data: base64 }]);
     pendingFieldRef.current = null;
     setCaptureModalOpen(false);
-  }, []);
+    // ── FIX 1: Auto-cycle to next recipient after placing signature ──────────
+    if (recipients.length > 1) {
+      setActiveRecipient(prev => (prev + 1) % recipients.length);
+    }
+  }, [recipients.length]);
 
   const handleCaptureCancel = useCallback(() => {
     pendingFieldRef.current = null;
     setCaptureModalOpen(false);
   }, []);
 
-  // Save fields
+  // Save fields — FIX 1: Block if any recipient has no fields
   const handleSaveFields = async () => {
     if (fields.length === 0) { toast.error('Add at least one signature field'); return; }
+
+    // Block if any recipient has zero fields assigned
+    if (recipientsWithNoFields.length > 0) {
+      const names = recipientsWithNoFields.map(r => r.name).join(', ');
+      toast.error(`These recipients have no fields assigned: ${names}. Every recipient needs at least one field.`);
+      return;
+    }
+
     setLoading(true);
     try {
-      // Need recipient IDs from server — re-fetch detail
       const detail = await envelopeApi.get(envelopeId);
       const fieldPayload: SignatureField[] = fields.map(f => ({
         envelope_document_id: documentId,
@@ -195,7 +225,6 @@ export function NewEnvelope() {
       <div className="max-w-3xl mx-auto">
         <div className="mb-8">
           <h1 className="text-2xl font-bold text-gray-900">New Envelope</h1>
-          {/* Wizard steps */}
           <div className="flex items-center gap-2 mt-4">
             {steps.map((s, i) => (
               <React.Fragment key={s.id}>
@@ -259,9 +288,12 @@ export function NewEnvelope() {
           <div className="card space-y-4">
             <h2 className="font-semibold text-gray-900">Add Recipients</h2>
             {recipients.map((r, i) => (
-              <div key={i} className="bg-gray-50 rounded-lg p-4 space-y-3 border border-gray-200">
+              <div key={i} className={`rounded-lg p-4 space-y-3 border-2 ${RECIPIENT_BADGE_COLORS[i % RECIPIENT_BADGE_COLORS.length].includes('blue') ? 'border-blue-200 bg-blue-50/30' : i % 4 === 1 ? 'border-purple-200 bg-purple-50/30' : i % 4 === 2 ? 'border-orange-200 bg-orange-50/30' : 'border-pink-200 bg-pink-50/30'}`}>
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-gray-700">Recipient {i + 1}</span>
+                  <div className="flex items-center gap-2">
+                    <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold border ${RECIPIENT_BADGE_COLORS[i % RECIPIENT_BADGE_COLORS.length]}`}>{i + 1}</span>
+                    <span className="text-sm font-medium text-gray-700">Recipient {i + 1}</span>
+                  </div>
                   {recipients.length > 1 && (
                     <button className="text-red-500 text-sm hover:text-red-700"
                       onClick={() => setRecipients(rs => rs.filter((_, ri) => ri !== i))}>Remove</button>
@@ -307,6 +339,41 @@ export function NewEnvelope() {
           <div className="space-y-4">
             <div className="card">
               <h2 className="font-semibold text-gray-900 mb-3">Place Signature Fields</h2>
+
+              {/* ── FIX 1: Recipient coverage tracker ─────────────────────────── */}
+              {recipients.length > 1 && (
+                <div className="mb-4 p-3 rounded-lg border border-gray-200 bg-gray-50">
+                  <p className="text-xs font-semibold text-gray-600 mb-2 uppercase tracking-wide">Field coverage — every recipient needs at least one field</p>
+                  <div className="flex flex-wrap gap-2">
+                    {recipients.map((r, i) => {
+                      const count = fields.filter(f => f.recipient_index === i).length;
+                      const hasFields = count > 0;
+                      return (
+                        <button
+                          key={i}
+                          onClick={() => setActiveRecipient(i)}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
+                            activeRecipient === i
+                              ? `${RECIPIENT_BADGE_COLORS[i % RECIPIENT_BADGE_COLORS.length]} ring-2 ring-offset-1 ring-current`
+                              : hasFields
+                              ? 'bg-green-50 text-green-700 border-green-300'
+                              : 'bg-red-50 text-red-600 border-red-300'
+                          }`}
+                        >
+                          {hasFields ? '✓' : '!'} {r.full_name || `Recipient ${i + 1}`}
+                          <span className="opacity-70">({count} field{count !== 1 ? 's' : ''})</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {recipientsWithNoFields.length > 0 && (
+                    <p className="text-xs text-red-600 mt-2 font-medium">
+                      ⚠ {recipientsWithNoFields.map(r => r.name).join(', ')} {recipientsWithNoFields.length === 1 ? 'has' : 'have'} no fields yet
+                    </p>
+                  )}
+                </div>
+              )}
+
               <div className="flex flex-wrap gap-2 mb-4">
                 <div>
                   <label className="label text-xs">Field Type</label>
@@ -319,8 +386,19 @@ export function NewEnvelope() {
                 </div>
                 <div>
                   <label className="label text-xs">For Recipient</label>
-                  <select className="input text-sm py-1.5" value={activeRecipient} onChange={e => setActiveRecipient(Number(e.target.value))}>
-                    {recipients.map((r, i) => <option key={i} value={i}>{r.full_name || `Recipient ${i + 1}`}</option>)}
+                  <select
+                    className={`input text-sm py-1.5 font-medium border-2 ${FIELD_COLORS[activeRecipient % FIELD_COLORS.length].split(' ')[0]}`}
+                    value={activeRecipient}
+                    onChange={e => setActiveRecipient(Number(e.target.value))}
+                  >
+                    {recipients.map((r, i) => {
+                      const count = fields.filter(f => f.recipient_index === i).length;
+                      return (
+                        <option key={i} value={i}>
+                          {r.full_name || `Recipient ${i + 1}`} ({count} field{count !== 1 ? 's' : ''})
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
                 <div>
@@ -330,16 +408,17 @@ export function NewEnvelope() {
                   </select>
                 </div>
                 <div className="flex items-end">
-                  <button className="btn-primary text-sm py-1.5" onClick={addField}>+ Add Field</button>
+                  <button className={`btn-primary text-sm py-1.5 flex items-center gap-1`} onClick={addField}>
+                    + Add Field for <span className="font-bold">{recipients[activeRecipient]?.full_name?.split(' ')[0] || `R${activeRecipient + 1}`}</span>
+                  </button>
                 </div>
               </div>
 
               <div className="text-xs text-gray-500 mb-2">Fields on page {activePage}: {fields.filter(f => f.page_number === activePage).length}</div>
 
-              {/* PDF canvas with real document */}
+              {/* PDF canvas */}
               <div ref={pageRef} className="relative bg-gray-100 border-2 border-gray-300 rounded-lg overflow-auto"
                 style={{ width: '100%', minHeight: '800px' }}>
-                {/* PDF rendered behind the draggable fields */}
                 {pdfFile ? (
                   <Document
                     file={pdfFile}
@@ -369,54 +448,64 @@ export function NewEnvelope() {
                     </div>
                   </div>
                 )}
-                {/* Transparent overlay — drag targets live here */}
                 <div className="absolute inset-0">
-                {fields.filter(f => f.page_number === activePage).map((field, fi) => (
-                  <Draggable
-                    key={field.id}
-                    bounds="parent"
-                    position={{ x: (field.x / 100) * (pageRef.current?.clientWidth || 600), y: (field.y / 100) * (pageRef.current?.clientHeight || 800) }}
-                    onStop={(_, data) => {
-                      const pW = pageRef.current?.clientWidth || 600;
-                      const pH = pageRef.current?.clientHeight || 800;
-                      setFields(fs => fs.map(f => f.id === field.id
-                        ? { ...f, x: (data.x / pW) * 100, y: (data.y / pH) * 100 }
-                        : f
-                      ));
-                    }}
-                  >
-                    <div className={`absolute cursor-move border-2 rounded px-1 py-0.5 text-xs font-medium select-none ${FIELD_COLORS[field.recipient_index % FIELD_COLORS.length]}`}
-                      style={{ width: `${field.width}%`, height: `${field.height}%` }}>
-                      <div className="flex items-center justify-between">
-                        <span className="truncate" style={{ fontSize: '9px' }}>{field.field_type}</span>
-                        <button className="text-red-400 hover:text-red-600 ml-1 text-xs leading-none"
-                          onClick={(e) => { e.stopPropagation(); setFields(fs => fs.filter(f => f.id !== field.id)); }}>×</button>
+                  {fields.filter(f => f.page_number === activePage).map((field) => (
+                    <Draggable
+                      key={field.id}
+                      bounds="parent"
+                      position={{ x: (field.x / 100) * (pageRef.current?.clientWidth || 600), y: (field.y / 100) * (pageRef.current?.clientHeight || 800) }}
+                      onStop={(_, data) => {
+                        const pW = pageRef.current?.clientWidth || 600;
+                        const pH = pageRef.current?.clientHeight || 800;
+                        setFields(fs => fs.map(f => f.id === field.id
+                          ? { ...f, x: (data.x / pW) * 100, y: (data.y / pH) * 100 }
+                          : f
+                        ));
+                      }}
+                    >
+                      <div
+                        className={`absolute cursor-move border-2 rounded px-1 py-0.5 select-none ${FIELD_COLORS[field.recipient_index % FIELD_COLORS.length]}`}
+                        style={{ width: `${field.width}%`, height: `${field.height}%` }}
+                      >
+                        <div className="flex items-center justify-between">
+                          {/* ── FIX 1: Show recipient name clearly on every field ── */}
+                          <span className="truncate font-semibold" style={{ fontSize: '9px' }}>
+                            {recipients[field.recipient_index]?.full_name?.split(' ')[0] || `R${field.recipient_index + 1}`} · {field.field_type}
+                          </span>
+                          <button className="text-red-400 hover:text-red-600 ml-1 text-xs leading-none"
+                            onClick={(e) => { e.stopPropagation(); setFields(fs => fs.filter(f => f.id !== field.id)); }}>×</button>
+                        </div>
+                        {field.preview_data ? (
+                          <img src={field.preview_data} alt="sig" className="w-full object-contain" style={{ maxHeight: '60%' }} />
+                        ) : field.field_type === 'date' ? (
+                          <div className="truncate" style={{ fontSize: '9px' }}>
+                            {new Date().toLocaleDateString('en-IN')}
+                          </div>
+                        ) : (
+                          <div className="opacity-60 truncate" style={{ fontSize: '9px' }}>
+                            {field.field_type}
+                          </div>
+                        )}
                       </div>
-                      {field.preview_data ? (
-                        <img src={field.preview_data} alt="sig" className="w-full object-contain" style={{ maxHeight: '60%' }} />
-                      ) : field.field_type === 'date' ? (
-                        <div className="text-gray-600 truncate" style={{ fontSize: '9px' }}>
-                          {new Date().toLocaleDateString('en-IN')}
-                        </div>
-                      ) : (
-                        <div className="text-gray-400 truncate" style={{ fontSize: '9px' }}>
-                          R{field.recipient_index + 1}: {recipients[field.recipient_index]?.full_name?.split(' ')[0] || '?'}
-                        </div>
-                      )}
-                    </div>
-                  </Draggable>
-                ))}
+                    </Draggable>
+                  ))}
                 </div>
               </div>
             </div>
 
+            {/* Field list */}
             <div className="card">
               <p className="text-sm font-medium text-gray-700 mb-2">All fields ({fields.length} total):</p>
               {fields.length === 0 ? <p className="text-gray-400 text-sm">No fields added yet</p> : (
                 <div className="space-y-1">
                   {fields.map(f => (
                     <div key={f.id} className="flex items-center justify-between text-sm py-1">
-                      <span className="text-gray-600">Page {f.page_number} — {f.field_type} — {recipients[f.recipient_index]?.full_name || `R${f.recipient_index + 1}`}</span>
+                      <span className="text-gray-600">
+                        Page {f.page_number} — {f.field_type} —{' '}
+                        <span className={`font-medium px-1.5 py-0.5 rounded text-xs ${RECIPIENT_BADGE_COLORS[f.recipient_index % RECIPIENT_BADGE_COLORS.length]}`}>
+                          {recipients[f.recipient_index]?.full_name || `R${f.recipient_index + 1}`}
+                        </span>
+                      </span>
                       <button className="text-red-400 text-xs hover:text-red-600" onClick={() => setFields(fs => fs.filter(x => x.id !== f.id))}>Remove</button>
                     </div>
                   ))}
@@ -426,8 +515,15 @@ export function NewEnvelope() {
 
             <div className="flex gap-3">
               <button className="btn-secondary" onClick={() => setStep('recipients')}>Back</button>
-              <button className="btn-primary flex-1" onClick={handleSaveFields} disabled={loading || fields.length === 0}>
-                {loading ? 'Saving...' : 'Save Fields & Review →'}
+              <button
+                className="btn-primary flex-1"
+                onClick={handleSaveFields}
+                disabled={loading || fields.length === 0 || recipientsWithNoFields.length > 0}
+                title={recipientsWithNoFields.length > 0 ? `Missing fields for: ${recipientsWithNoFields.map(r => r.name).join(', ')}` : ''}
+              >
+                {loading ? 'Saving...' : recipientsWithNoFields.length > 0
+                  ? `⚠ Missing fields for ${recipientsWithNoFields.length} recipient${recipientsWithNoFields.length > 1 ? 's' : ''}`
+                  : 'Save Fields & Review →'}
               </button>
             </div>
           </div>
@@ -446,15 +542,19 @@ export function NewEnvelope() {
             <div>
               <p className="font-medium text-gray-700 mb-2">Recipients ({recipients.length}):</p>
               <div className="space-y-2">
-                {recipients.map((r, i) => (
-                  <div key={i} className="flex items-center justify-between bg-blue-50 rounded-lg px-4 py-2 text-sm">
-                    <span className="font-medium text-blue-800">{r.full_name}</span>
-                    <span className="text-blue-600">{r.email}</span>
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${r.auth_required === 'AES' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
-                      {r.auth_required}
-                    </span>
-                  </div>
-                ))}
+                {recipients.map((r, i) => {
+                  const fieldCount = fields.filter(f => f.recipient_index === i).length;
+                  return (
+                    <div key={i} className="flex items-center justify-between bg-blue-50 rounded-lg px-4 py-2 text-sm">
+                      <span className="font-medium text-blue-800">{r.full_name}</span>
+                      <span className="text-blue-600">{r.email}</span>
+                      <span className="text-xs text-gray-500">{fieldCount} field{fieldCount !== 1 ? 's' : ''}</span>
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${r.auth_required === 'AES' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
+                        {r.auth_required}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
             </div>
             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-sm text-yellow-800">
@@ -469,6 +569,7 @@ export function NewEnvelope() {
           </div>
         )}
       </div>
+
       {captureModalOpen && pendingFieldRef.current && (
         <SignatureCaptureModal
           fieldType={pendingFieldRef.current.field_type as 'signature' | 'initials'}

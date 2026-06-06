@@ -38,7 +38,7 @@ export async function sendVerificationEmail(
     <p>This link expires in 24 hours.</p>
   `;
 
-  if (process.env.NODE_ENV === "development") {
+  if (process.env.NODE_ENV === "development" && !process.env.SMTP_USER) {
     console.log(`[EMAIL] Verification email to ${email}: ${verifyUrl}`);
     return verifyUrl;
   }
@@ -96,216 +96,56 @@ export async function sendCompletionEmail(
   signedPdfName: string,
   certBuffer?: Buffer,
 ): Promise<void> {
-  const appName = process.env.APP_NAME || "DocuSign";
-  const fromDomain =
-    process.env.APP_BASE_URL?.replace(/https?:\/\//, "") || "digsign.app";
-  const envelopeUrl = `${process.env.FRONTEND_URL}/envelopes/${envelopeId}`;
-  const completedDate = new Date().toLocaleDateString("en-IN", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
+  const downloadUrl = `${process.env.FRONTEND_URL}/envelopes/${envelopeId}`;
 
-  // ── Professional HTML email (table-based, email-client safe) ──────────────
   const html = `
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Document Signing Complete</title>
-</head>
-<body style="margin:0;padding:0;background-color:#f4f6f9;font-family:Arial,Helvetica,sans-serif;">
+    <!DOCTYPE html>
+    <html>
+    <body style="margin:0;padding:0;background:#f9fafb;font-family:Arial,sans-serif;">
+      <table width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;padding:40px 20px;">
+        <tr><td align="center">
+          <table width="520" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;border:1px solid #e5e7eb;">
+            <tr>
+              <td style="background:#16a34a;padding:24px 32px;border-radius:12px 12px 0 0;">
+                <h1 style="margin:0;color:#ffffff;font-size:20px;font-weight:700;">DocuSign</h1>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:32px;">
+                <h2 style="margin:0 0 12px;color:#111827;font-size:18px;">Document Signing Complete</h2>
+                <p style="margin:0 0 8px;color:#374151;font-size:14px;">Hello ${name},</p>
+                <p style="margin:0 0 20px;color:#6b7280;font-size:14px;line-height:1.6;">
+                  All parties have signed: <strong>${subject}</strong>
+                </p>
+                <p style="margin:0 0 24px;color:#6b7280;font-size:13px;">
+                  The signed document${certBuffer ? " and Certificate of Completion are" : " is"} attached to this email.
+                </p>
+                <a href="${downloadUrl}"
+                   style="display:inline-block;background:#16a34a;color:#ffffff;padding:12px 28px;
+                          border-radius:8px;text-decoration:none;font-size:14px;font-weight:600;">
+                  View Envelope
+                </a>
+              </td>
+            </tr>
+            <tr>
+              <td style="background:#f9fafb;padding:16px 32px;border-top:1px solid #f3f4f6;border-radius:0 0 12px 12px;">
+                <p style="margin:0;font-size:12px;color:#9ca3af;">© ${new Date().getFullYear()} DocuSign. All rights reserved.</p>
+              </td>
+            </tr>
+          </table>
+        </td></tr>
+      </table>
+    </body>
+    </html>
+  `;
 
-  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f6f9;padding:32px 0;">
-    <tr>
-      <td align="center">
-        <table width="600" cellpadding="0" cellspacing="0"
-               style="background:#ffffff;border-radius:8px;overflow:hidden;
-                      box-shadow:0 2px 8px rgba(0,0,0,0.08);max-width:600px;">
+  if (process.env.NODE_ENV === "development" && !process.env.SMTP_USER) {
+    console.log(
+      `[EMAIL] Completion email to ${email} for envelope ${envelopeId}`,
+    );
+    return;
+  }
 
-          <!-- Header -->
-          <tr>
-            <td style="background:#1B3A6B;padding:32px 40px;">
-              <table width="100%" cellpadding="0" cellspacing="0">
-                <tr>
-                  <td>
-                    <p style="margin:0;font-size:22px;font-weight:bold;color:#ffffff;
-                               letter-spacing:0.5px;">${appName}</p>
-                    <p style="margin:6px 0 0;font-size:13px;color:#a8c4e0;">
-                      Secure Digital Signing Platform
-                    </p>
-                  </td>
-                  <td align="right">
-                    <!-- Green verified badge -->
-                    <table cellpadding="0" cellspacing="0">
-                      <tr>
-                        <td style="background:#16a34a;border-radius:50%;
-                                   width:48px;height:48px;text-align:center;
-                                   vertical-align:middle;">
-                          <span style="font-size:24px;color:#ffffff;line-height:48px;">&#10003;</span>
-                        </td>
-                      </tr>
-                    </table>
-                  </td>
-                </tr>
-              </table>
-            </td>
-          </tr>
-
-          <!-- Status banner -->
-          <tr>
-            <td style="background:#f0fdf4;border-bottom:2px solid #bbf7d0;
-                       padding:16px 40px;">
-              <p style="margin:0;font-size:15px;font-weight:bold;color:#15803d;">
-                &#10003;&nbsp;&nbsp;All parties have completed signing
-              </p>
-            </td>
-          </tr>
-
-          <!-- Body -->
-          <tr>
-            <td style="padding:36px 40px;">
-
-              <p style="margin:0 0 8px;font-size:15px;color:#374151;">
-                Dear <strong>${name}</strong>,
-              </p>
-              <p style="margin:0 0 24px;font-size:15px;color:#374151;line-height:1.6;">
-                We are pleased to inform you that all required parties have successfully
-                signed the document listed below. This email serves as your official
-                notification of completion.
-              </p>
-
-              <!-- Document details box -->
-              <table width="100%" cellpadding="0" cellspacing="0"
-                     style="background:#f8fafc;border:1px solid #e2e8f0;
-                            border-radius:6px;margin-bottom:28px;">
-                <tr>
-                  <td style="padding:20px 24px;">
-                    <p style="margin:0 0 12px;font-size:11px;font-weight:bold;
-                               color:#6b7280;text-transform:uppercase;letter-spacing:1px;">
-                      Document Details
-                    </p>
-                    <table width="100%" cellpadding="0" cellspacing="0">
-                      <tr>
-                        <td style="padding:5px 0;font-size:13px;
-                                   color:#6b7280;width:140px;">Document</td>
-                        <td style="padding:5px 0;font-size:13px;
-                                   color:#111827;font-weight:bold;">${subject}</td>
-                      </tr>
-                      <tr>
-                        <td style="padding:5px 0;font-size:13px;color:#6b7280;">
-                          Envelope ID</td>
-                        <td style="padding:5px 0;font-size:12px;
-                                   color:#4b5563;font-family:monospace;">${envelopeId}</td>
-                      </tr>
-                      <tr>
-                        <td style="padding:5px 0;font-size:13px;color:#6b7280;">
-                          Completed On</td>
-                        <td style="padding:5px 0;font-size:13px;color:#111827;">
-                          ${completedDate}</td>
-                      </tr>
-                      <tr>
-                        <td style="padding:5px 0;font-size:13px;color:#6b7280;">
-                          Status</td>
-                        <td style="padding:5px 0;">
-                          <span style="display:inline-block;background:#dcfce7;
-                                       color:#15803d;font-size:12px;font-weight:bold;
-                                       padding:2px 10px;border-radius:12px;">
-                            COMPLETED
-                          </span>
-                        </td>
-                      </tr>
-                    </table>
-                  </td>
-                </tr>
-              </table>
-
-              <!-- Attachments notice -->
-              <table width="100%" cellpadding="0" cellspacing="0"
-                     style="background:#eff6ff;border:1px solid #bfdbfe;
-                            border-radius:6px;margin-bottom:28px;">
-                <tr>
-                  <td style="padding:18px 24px;">
-                    <p style="margin:0 0 10px;font-size:13px;font-weight:bold;
-                               color:#1d4ed8;">
-                      &#128206;&nbsp; Attached Documents
-                    </p>
-                    ${
-                      signedPdfBuffer
-                        ? `
-                    <p style="margin:0 0 6px;font-size:13px;color:#1e40af;">
-                      &#10003;&nbsp; <strong>${signedPdfName}</strong>
-                      &nbsp;<span style="color:#6b7280;font-size:12px;">
-                        — Signed document with embedded digital signatures
-                      </span>
-                    </p>`
-                        : ""
-                    }
-                    ${
-                      certBuffer
-                        ? `
-                    <p style="margin:0;font-size:13px;color:#1e40af;">
-                      &#10003;&nbsp; <strong>certificate-${envelopeId}.pdf</strong>
-                      &nbsp;<span style="color:#6b7280;font-size:12px;">
-                        — Certificate of Completion with full audit trail
-                      </span>
-                    </p>`
-                        : ""
-                    }
-                  </td>
-                </tr>
-              </table>
-
-              <!-- CTA button -->
-              <table cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
-                <tr>
-                  <td style="background:#1B3A6B;border-radius:6px;">
-                    <a href="${envelopeUrl}"
-                       style="display:inline-block;padding:13px 28px;
-                              font-size:14px;font-weight:bold;color:#ffffff;
-                              text-decoration:none;">
-                      View Envelope Details &rarr;
-                    </a>
-                  </td>
-                </tr>
-              </table>
-
-              <p style="margin:0;font-size:13px;color:#6b7280;line-height:1.6;">
-                The signed document contains cryptographically embedded digital
-                signatures that are independently verifiable in any PDF reader
-                (e.g. Adobe Acrobat). The Certificate of Completion provides a
-                full audit trail including signer identities, timestamps, IP
-                addresses, and the SHA-256 document integrity hash.
-              </p>
-
-            </td>
-          </tr>
-
-          <!-- Footer -->
-          <tr>
-            <td style="background:#f8fafc;border-top:1px solid #e5e7eb;
-                       padding:24px 40px;">
-              <p style="margin:0 0 6px;font-size:12px;color:#9ca3af;">
-                This is an automated notification from <strong>${appName}</strong>.
-                Please do not reply to this email.
-              </p>
-              <p style="margin:0;font-size:12px;color:#9ca3af;">
-                The documents attached to this email are legally binding.
-                Retain them for your records.
-              </p>
-            </td>
-          </tr>
-
-        </table>
-      </td>
-    </tr>
-  </table>
-
-</body>
-</html>`;
-
-  // Build attachments array — only include what was actually generated
   const attachments: MailAttachment[] = [];
   if (signedPdfBuffer) {
     attachments.push({
@@ -316,26 +156,110 @@ export async function sendCompletionEmail(
   }
   if (certBuffer) {
     attachments.push({
-      filename: `certificate-${envelopeId}.pdf`,
+      filename: `certificate-of-completion-${envelopeId}.pdf`,
       content: certBuffer,
       contentType: "application/pdf",
     });
   }
 
-  // In development: log what would have been sent (don't skip — so attachment
-  // logic is exercised) but skip the actual SMTP call if no SMTP configured
-  if (process.env.NODE_ENV === "development" && !process.env.SMTP_USER) {
-    console.log(
-      `[EMAIL] Completion email → ${email} | attachments: ${attachments.map((a) => a.filename ?? "unnamed").join(", ") || "none"}`,
-    );
-    return;
-  }
-
   await getTransporter().sendMail({
-    from: `"${appName}" <noreply@${fromDomain}>`,
+    from: `"DocuSign" <noreply@${process.env.APP_BASE_URL?.replace(/https?:\/\//, "") || "digsign.app"}>`,
     to: email,
     subject: `Signing complete: ${subject}`,
     html,
     attachments,
+  });
+}
+
+export async function sendPasswordResetEmail(
+  email: string,
+  name: string,
+  resetUrl: string,
+): Promise<void> {
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head><meta charset="utf-8"></head>
+    <body style="margin:0;padding:0;background:#f9fafb;font-family:Arial,sans-serif;">
+      <table width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;padding:40px 20px;">
+        <tr><td align="center">
+          <table width="520" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;border:1px solid #e5e7eb;overflow:hidden;">
+            <!-- Header -->
+            <tr>
+              <td style="background:#16a34a;padding:28px 32px;text-align:center;">
+                <table cellpadding="0" cellspacing="0" style="margin:0 auto;">
+                  <tr>
+                    <td style="background:rgba(255,255,255,0.2);border-radius:10px;padding:8px 12px;">
+                      <span style="color:#ffffff;font-size:18px;font-weight:700;letter-spacing:-0.3px;">DocuSign</span>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <!-- Body -->
+            <tr>
+              <td style="padding:36px 40px;">
+                <h1 style="margin:0 0 8px 0;font-size:22px;font-weight:700;color:#111827;">
+                  Reset your password
+                </h1>
+                <p style="margin:0 0 20px 0;font-size:15px;color:#6b7280;line-height:1.6;">
+                  Hi ${name},
+                </p>
+                <p style="margin:0 0 28px 0;font-size:15px;color:#374151;line-height:1.7;">
+                  We received a request to reset the password for your DocuSign account associated with
+                  <strong>${email}</strong>. Click the button below to set a new password.
+                </p>
+                <!-- CTA Button -->
+                <table cellpadding="0" cellspacing="0" style="margin:0 0 28px 0;">
+                  <tr>
+                    <td style="background:#16a34a;border-radius:8px;">
+                      <a href="${resetUrl}"
+                         style="display:inline-block;padding:14px 32px;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;border-radius:8px;">
+                        Reset My Password
+                      </a>
+                    </td>
+                  </tr>
+                </table>
+                <!-- Fallback URL -->
+                <p style="margin:0 0 8px 0;font-size:13px;color:#9ca3af;">
+                  If the button doesn't work, copy and paste this link into your browser:
+                </p>
+                <p style="margin:0 0 28px 0;font-size:12px;color:#6366f1;word-break:break-all;">
+                  ${resetUrl}
+                </p>
+                <!-- Warning -->
+                <div style="background:#fef9c3;border:1px solid #fde047;border-radius:8px;padding:14px 16px;">
+                  <p style="margin:0;font-size:13px;color:#854d0e;line-height:1.6;">
+                    ⏱ This link expires in <strong>30 minutes</strong>. It can only be used once.
+                    If you did not request a password reset, you can safely ignore this email.
+                  </p>
+                </div>
+              </td>
+            </tr>
+            <!-- Footer -->
+            <tr>
+              <td style="background:#f9fafb;padding:20px 40px;border-top:1px solid #f3f4f6;text-align:center;">
+                <p style="margin:0;font-size:12px;color:#9ca3af;">
+                  © ${new Date().getFullYear()} DocuSign Digital Signing Platform. All rights reserved.
+                </p>
+              </td>
+            </tr>
+          </table>
+        </td></tr>
+      </table>
+    </body>
+    </html>
+  `;
+
+  if (process.env.NODE_ENV === "development" && !process.env.SMTP_USER) {
+    console.log(`[EMAIL] Password reset link for ${email}: ${resetUrl}`);
+    return;
+  }
+
+  await getTransporter().sendMail({
+    from: `"DocuSign" <noreply@${process.env.APP_BASE_URL?.replace(/https?:\/\//, "") || "digsign.app"}>`,
+    to: email,
+    subject: "Reset your DocuSign password",
+    html,
   });
 }

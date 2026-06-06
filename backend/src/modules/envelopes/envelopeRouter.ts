@@ -80,6 +80,33 @@ router.get(
 );
 
 router.patch(
+  "/:id",
+  requireAuth,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { id } = req.params;
+      const { subject, message } = req.body;
+      if (!subject?.trim()) {
+        res.status(400).json({ error: "subject required" });
+        return;
+      }
+      const { query } = await import("../../db/pool");
+      const { rows } = await query(
+        "UPDATE envelopes SET subject=$1, message=COALESCE($2, message), updated_at=now() WHERE id=$3 AND sender_id=$4 RETURNING id",
+        [subject.trim(), message, id, req.user!.userId],
+      );
+      if (rows.length === 0) {
+        res.status(404).json({ error: "Envelope not found" });
+        return;
+      }
+      res.json({ message: "Envelope updated" });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+router.patch(
   "/:id/recipients",
   requireAuth,
   async (req: Request, res: Response, next: NextFunction) => {
@@ -140,6 +167,34 @@ router.post(
       }
       await voidEnvelope(req.params.id, req.user!.userId, reason);
       res.json({ message: "Envelope voided" });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+router.delete(
+  "/:id",
+  requireAuth,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { id } = req.params;
+      // Only allow deleting DRAFT envelopes — sent/completed envelopes must be voided
+      const { rows } = await query<any>(
+        "SELECT status, sender_id FROM envelopes WHERE id=$1",
+        [id],
+      );
+      if (!rows[0]) {
+        res.status(404).json({ error: "Envelope not found" });
+        return;
+      }
+      if (rows[0].sender_id !== req.user!.userId) {
+        res.status(403).json({ error: "Not authorised" });
+        return;
+      }
+      // Delete cascades to envelope_documents, envelope_recipients, audit_events via FK
+      await query("DELETE FROM envelopes WHERE id=$1", [id]);
+      res.json({ message: "Envelope deleted" });
     } catch (err) {
       next(err);
     }
