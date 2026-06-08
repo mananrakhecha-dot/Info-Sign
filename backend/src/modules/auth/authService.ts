@@ -253,7 +253,7 @@ async function generateRefreshToken(userId: string): Promise<string> {
 
 export async function refreshAccessToken(
   refreshToken: string,
-): Promise<{ accessToken: string }> {
+): Promise<{ accessToken: string; newRefreshToken: string }> {
   const tokenHash = crypto
     .createHash("sha256")
     .update(refreshToken)
@@ -268,13 +268,20 @@ export async function refreshAccessToken(
     throw new AppError("Invalid or expired refresh token", 401);
 
   const user = rows[0];
+
+  // Rotate the refresh token — delete old token immediately after validation.
+  // This ensures a stolen refresh token can only be used once; the next use
+  // of the stolen token will fail because it is already removed from the DB.
+  await query("DELETE FROM refresh_tokens WHERE token_hash=$1", [tokenHash]);
+  const newRefreshToken = await generateRefreshToken(user.uid);
+
   const accessToken = generateAccessToken({
     id: user.uid,
     email: user.email,
     role: user.role,
     identity_level: user.identity_level,
   });
-  return { accessToken };
+  return { accessToken, newRefreshToken };
 }
 
 export async function logoutUser(refreshToken: string): Promise<void> {

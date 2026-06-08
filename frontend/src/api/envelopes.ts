@@ -45,6 +45,8 @@ export interface Recipient {
   auth_required: "SES" | "AES";
   signed_at?: string;
   viewed_at?: string;
+  last_reminded_at?: string;
+  reminder_count?: number;
 }
 
 export interface SignatureField {
@@ -88,6 +90,9 @@ export const envelopeApi = {
   void: (id: string, reason: string) =>
     api.post(`/envelopes/${id}/void`, { reason }),
 
+  remind: (id: string, recipientId: string) =>
+    api.post(`/envelopes/${id}/recipients/${recipientId}/remind`),
+
   history: (id: string) => api.get(`/envelopes/${id}/history`),
 
   status: (id: string) => api.get(`/envelopes/${id}/status`),
@@ -95,6 +100,11 @@ export const envelopeApi = {
   downloadUrl: (id: string) => `/api/envelopes/${id}/download`,
 
   certificateUrl: (id: string) => `/api/envelopes/${id}/certificate`,
+
+  selfSign: (formData: FormData) =>
+    api.post<{ envelopeId: string }>("/envelopes/self-sign", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    }),
 };
 
 export const signingApi = {

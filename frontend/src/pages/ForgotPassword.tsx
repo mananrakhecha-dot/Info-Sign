@@ -38,7 +38,7 @@ export function ForgotPassword() {
           <div className="w-9 h-9 bg-brand-600 rounded-xl flex items-center justify-center shadow-sm">
             <FileText className="w-5 h-5 text-white" />
           </div>
-          <span className="text-lg font-bold text-gray-900">DocuSign</span>
+          <span className="text-lg font-bold text-gray-900">InfoSign</span>
         </div>
 
         <div className="bg-white rounded-2xl shadow-xl shadow-gray-100/60 border border-gray-100 p-8">

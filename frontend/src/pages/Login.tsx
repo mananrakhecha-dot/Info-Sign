@@ -3,7 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import toast from 'react-hot-toast';
 import { motion } from 'framer-motion';
-import { Eye, EyeOff, ArrowRight, FileText } from 'lucide-react';
+import { Eye, EyeOff, ArrowRight, FileText, Mail, Lock } from 'lucide-react';
 
 // ── Animated dot-map background ─────────────────────────────────────────────
 function DotMap() {
@@ -33,12 +33,10 @@ function DotMap() {
     const { w, h } = dims;
     const gap = 14;
 
-    // Generate world-map-shaped dots
     const dots: { x: number; y: number; o: number }[] = [];
     for (let x = 0; x < w; x += gap) {
       for (let y = 0; y < h; y += gap) {
-        const xr = x / w;
-        const yr = y / h;
+        const xr = x / w, yr = y / h;
         const land =
           (xr > 0.05 && xr < 0.25 && yr > 0.1 && yr < 0.42) ||
           (xr > 0.14 && xr < 0.26 && yr > 0.42 && yr < 0.78) ||
@@ -46,13 +44,11 @@ function DotMap() {
           (xr > 0.34 && xr < 0.51 && yr > 0.35 && yr < 0.68) ||
           (xr > 0.44 && xr < 0.72 && yr > 0.08 && yr < 0.52) ||
           (xr > 0.63 && xr < 0.82 && yr > 0.58 && yr < 0.82);
-        if (land && Math.random() > 0.28) {
+        if (land && Math.random() > 0.28)
           dots.push({ x, y, o: Math.random() * 0.45 + 0.15 });
-        }
       }
     }
 
-    // Animated routes
     const routes = [
       { sx: w * 0.12, sy: h * 0.22, ex: w * 0.38, ey: h * 0.18, delay: 0 },
       { sx: w * 0.38, sy: h * 0.18, ex: w * 0.58, ey: h * 0.25, delay: 2 },
@@ -68,7 +64,7 @@ function DotMap() {
       ctx.clearRect(0, 0, w, h);
       dots.forEach(d => {
         ctx.beginPath();
-        ctx.arc(d.x, d.y, 1, 0, Math.PI * 2);
+        ctx.arc(d.x, d.y, 1.1, 0, Math.PI * 2);
         ctx.fillStyle = `rgba(99,102,241,${d.o})`;
         ctx.fill();
       });
@@ -90,26 +86,18 @@ function DotMap() {
         ctx.lineWidth = 1.2;
         ctx.stroke();
 
-        ctx.beginPath();
-        ctx.arc(r.sx, r.sy, 3, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(99,102,241,0.8)';
-        ctx.fill();
+        ctx.beginPath(); ctx.arc(r.sx, r.sy, 3, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(99,102,241,0.8)'; ctx.fill();
 
-        ctx.beginPath();
-        ctx.arc(cx, cy, 3, 0, Math.PI * 2);
-        ctx.fillStyle = '#6366f1';
-        ctx.fill();
+        ctx.beginPath(); ctx.arc(cx, cy, 3, 0, Math.PI * 2);
+        ctx.fillStyle = '#6366f1'; ctx.fill();
 
-        ctx.beginPath();
-        ctx.arc(cx, cy, 7, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(99,102,241,0.25)';
-        ctx.fill();
+        ctx.beginPath(); ctx.arc(cx, cy, 7, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(99,102,241,0.2)'; ctx.fill();
 
         if (p === 1) {
-          ctx.beginPath();
-          ctx.arc(r.ex, r.ey, 3, 0, Math.PI * 2);
-          ctx.fillStyle = '#6366f1';
-          ctx.fill();
+          ctx.beginPath(); ctx.arc(r.ex, r.ey, 3, 0, Math.PI * 2);
+          ctx.fillStyle = '#6366f1'; ctx.fill();
         }
       });
 
@@ -130,6 +118,7 @@ export function Login() {
   const [form, setForm] = useState({ email: '', password: '' });
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [focused, setFocused] = useState<'email' | 'password' | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -137,7 +126,7 @@ export function Login() {
     try {
       await login(form.email, form.password);
       toast.success('Welcome back!');
-      navigate('/dashboard');
+      navigate('/home');
     } catch (err: any) {
       toast.error(err.response?.data?.error || 'Login failed');
     } finally {
@@ -148,55 +137,59 @@ export function Login() {
   return (
     <div className="min-h-screen w-full flex items-center justify-center bg-gradient-to-br from-indigo-50 via-white to-blue-50 p-4">
       <motion.div
-        initial={{ opacity: 0, scale: 0.96 }}
+        initial={{ opacity: 0, scale: 0.97 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.45 }}
-        className="w-full max-w-4xl overflow-hidden rounded-2xl flex bg-white shadow-2xl shadow-indigo-100/60"
+        className="w-full max-w-4xl overflow-hidden rounded-3xl flex bg-white shadow-[0_32px_80px_-12px_rgba(99,102,241,0.18),0_8px_24px_-4px_rgba(0,0,0,0.08)]"
       >
-        {/* ── Left panel — animated map ── */}
+
+        {/* ── Left panel — animated dot map ── */}
         <div className="hidden md:block w-1/2 relative overflow-hidden border-r border-gray-100">
-          <div className="absolute inset-0 bg-gradient-to-br from-indigo-50 to-blue-100">
+          <div className="absolute inset-0 bg-gradient-to-br from-indigo-100 via-indigo-50 to-blue-100">
             <DotMap />
           </div>
-          {/* Overlay content */}
+
+          {/* Overlay */}
           <div className="relative z-10 flex flex-col items-center justify-center h-full p-10 text-center">
             <motion.div
               initial={{ opacity: 0, y: -16 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.5, duration: 0.5 }}
-              className="w-14 h-14 bg-brand-600 rounded-2xl flex items-center justify-center shadow-lg shadow-brand-200 mb-6"
+              transition={{ delay: 0.4, duration: 0.5 }}
+              className="w-16 h-16 bg-brand-600 rounded-2xl flex items-center justify-center shadow-xl shadow-brand-300/50 mb-6"
             >
               <FileText className="w-7 h-7 text-white" />
             </motion.div>
+
             <motion.h2
-              initial={{ opacity: 0, y: -16 }}
+              initial={{ opacity: 0, y: -12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.5, duration: 0.5 }}
+              className="text-3xl font-bold text-brand-700 mb-3 tracking-tight"
+            >
+              InfoSign
+            </motion.h2>
+
+            <motion.p
+              initial={{ opacity: 0, y: -12 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.6, duration: 0.5 }}
-              className="text-3xl font-bold text-brand-700 mb-3"
-            >
-              DocuSign
-            </motion.h2>
-            <motion.p
-              initial={{ opacity: 0, y: -16 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.7, duration: 0.5 }}
               className="text-sm text-gray-500 max-w-xs leading-relaxed"
             >
               Sign in to access your digital signing dashboard and manage your documents securely.
             </motion.p>
 
-            {/* Stats row */}
+            {/* Stats */}
             <motion.div
-              initial={{ opacity: 0, y: 16 }}
+              initial={{ opacity: 0, y: 14 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.9, duration: 0.5 }}
-              className="flex gap-6 mt-10"
+              transition={{ delay: 0.75, duration: 0.5 }}
+              className="flex gap-5 mt-10"
             >
               {[
                 { label: 'Documents signed', value: '2M+' },
                 { label: 'Businesses', value: '10K+' },
               ].map(stat => (
-                <div key={stat.label} className="bg-white/70 backdrop-blur-sm rounded-xl px-5 py-3 border border-white/80">
+                <div key={stat.label} className="bg-white/80 backdrop-blur-sm rounded-xl px-5 py-3 border border-white shadow-md shadow-indigo-100/40">
                   <p className="text-xl font-bold text-brand-700">{stat.value}</p>
                   <p className="text-xs text-gray-500 mt-0.5">{stat.label}</p>
                 </div>
@@ -206,22 +199,22 @@ export function Login() {
         </div>
 
         {/* ── Right panel — login form ── */}
-        <div className="w-full md:w-1/2 p-8 md:p-12 flex flex-col justify-center bg-white">
+        <div className="w-full md:w-1/2 p-8 md:p-12 flex flex-col justify-center bg-white/98">
           <motion.div
-            initial={{ opacity: 0, y: 16 }}
+            initial={{ opacity: 0, y: 14 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.45 }}
+            transition={{ duration: 0.45, delay: 0.1 }}
           >
             {/* Mobile logo */}
             <div className="flex items-center gap-2 mb-8 md:hidden">
               <div className="w-8 h-8 bg-brand-600 rounded-lg flex items-center justify-center">
                 <FileText className="w-4 h-4 text-white" />
               </div>
-              <span className="font-bold text-gray-900">DocuSign</span>
+              <span className="font-bold text-gray-900">InfoSign</span>
             </div>
 
-            <h1 className="text-2xl font-bold text-gray-900 mb-1">Welcome back</h1>
-            <p className="text-gray-500 text-sm mb-8">Sign in to your account to continue</p>
+            <h1 className="text-2xl font-bold text-gray-900 mb-1 tracking-tight">Welcome back</h1>
+            <p className="text-gray-400 text-sm mb-8">Sign in to your account to continue</p>
 
             {/* Email verified banner */}
             {searchParams.get('verified') === '1' && (
@@ -230,25 +223,37 @@ export function Login() {
                 animate={{ opacity: 1, y: 0 }}
                 className="mb-6 bg-green-50 border border-green-200 rounded-xl px-4 py-3 text-sm text-green-700 flex items-center gap-2"
               >
-                <span>✅</span> Email verified! You can now sign in.
+                ✅ Email verified! You can now sign in.
               </motion.div>
             )}
 
             <form onSubmit={handleSubmit} className="space-y-5">
+
               {/* Email */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">
                   Email <span className="text-brand-500">*</span>
                 </label>
-                <input
-                  className="input"
-                  type="email"
-                  placeholder="you@example.com"
-                  value={form.email}
-                  onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
-                  required
-                  autoComplete="email"
-                />
+                <div className={`relative rounded-lg border transition-all duration-200 ${
+                  focused === 'email'
+                    ? 'border-brand-500 ring-2 ring-brand-100 bg-brand-50/30'
+                    : 'border-gray-200 hover:border-gray-300 bg-gray-50/60'
+                }`}>
+                  <Mail className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors ${
+                    focused === 'email' ? 'text-brand-500' : 'text-gray-400'
+                  }`} />
+                  <input
+                    type="email"
+                    placeholder="you@example.com"
+                    value={form.email}
+                    onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+                    onFocus={() => setFocused('email')}
+                    onBlur={() => setFocused(null)}
+                    required
+                    autoComplete="email"
+                    className="block w-full pl-10 pr-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 bg-transparent focus:outline-none rounded-lg"
+                  />
+                </div>
               </div>
 
               {/* Password */}
@@ -257,32 +262,36 @@ export function Login() {
                   <label className="block text-sm font-medium text-gray-700">
                     Password <span className="text-brand-500">*</span>
                   </label>
-                  <Link
-                    to="/forgot-password"
-                    className="text-xs text-brand-600 hover:text-brand-700 transition-colors"
-                  >
+                  <Link to="/forgot-password"
+                    className="text-xs text-brand-600 hover:text-brand-700 font-medium transition-colors">
                     Forgot password?
                   </Link>
                 </div>
-                <div className="relative">
+                <div className={`relative rounded-lg border transition-all duration-200 ${
+                  focused === 'password'
+                    ? 'border-brand-500 ring-2 ring-brand-100 bg-brand-50/30'
+                    : 'border-gray-200 hover:border-gray-300 bg-gray-50/60'
+                }`}>
+                  <Lock className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors ${
+                    focused === 'password' ? 'text-brand-500' : 'text-gray-400'
+                  }`} />
                   <input
-                    className="input pr-10"
                     type={showPassword ? 'text' : 'password'}
                     placeholder="Your password"
                     value={form.password}
                     onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
+                    onFocus={() => setFocused('password')}
+                    onBlur={() => setFocused(null)}
                     required
                     autoComplete="current-password"
+                    className="block w-full pl-10 pr-10 py-2.5 text-sm text-gray-900 placeholder-gray-400 bg-transparent focus:outline-none rounded-lg"
                   />
                   <button
                     type="button"
+                    onClick={() => setShowPassword(v => !v)}
                     className="absolute inset-y-0 right-3 flex items-center text-gray-400 hover:text-gray-600 transition-colors"
-                    onClick={() => setShowPassword(!showPassword)}
                   >
-                    {showPassword
-                      ? <EyeOff className="w-4 h-4" />
-                      : <Eye className="w-4 h-4" />
-                    }
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
               </div>
@@ -292,10 +301,11 @@ export function Login() {
                 type="submit"
                 disabled={loading}
                 whileHover={{ scale: 1.01 }}
-                whileTap={{ scale: 0.98 }}
-                className="btn-primary w-full py-2.5 mt-2 relative overflow-hidden group"
+                whileTap={{ scale: 0.99 }}
+                className="btn-primary w-full py-3 mt-1 relative overflow-hidden group shadow-md shadow-brand-200/60 hover:shadow-lg hover:shadow-brand-200/80 transition-shadow"
               >
-                <span className="flex items-center justify-center gap-2">
+                <span className="absolute inset-0 bg-white/10 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700 skew-x-12 pointer-events-none" />
+                <span className="relative flex items-center justify-center gap-2">
                   {loading ? (
                     <>
                       <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -325,14 +335,15 @@ export function Login() {
               <motion.button
                 type="button"
                 whileHover={{ scale: 1.01 }}
-                whileTap={{ scale: 0.98 }}
-                className="w-full py-2.5 rounded-lg border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-all"
+                whileTap={{ scale: 0.99 }}
+                className="w-full py-3 rounded-lg border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-800 transition-all"
               >
                 Create a free account
               </motion.button>
             </Link>
           </motion.div>
         </div>
+
       </motion.div>
     </div>
   );

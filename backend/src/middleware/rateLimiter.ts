@@ -24,3 +24,16 @@ export const apiLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 });
+
+// Self-sign is the heaviest endpoint: RSA-2048 PKCS#7 signing + PDF render + email.
+// Keyed by userId (from JWT, set by requireAuth) so rotating IPs cannot bypass it.
+// req.user is populated by requireAuth before this middleware runs — typed via
+// Express namespace augmentation in auth.ts, no cast needed.
+export const selfSignLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  keyGenerator: (req) => req.user?.userId || req.ip || 'unknown',
+  message: { error: 'Too many signing requests, please wait 15 minutes' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});

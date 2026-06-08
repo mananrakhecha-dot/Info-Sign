@@ -44,7 +44,7 @@ function Navbar() {
           <div className="w-8 h-8 bg-brand-600 rounded-lg flex items-center justify-center">
             <FileText className="w-4 h-4 text-white" />
           </div>
-          <span className="text-lg font-bold text-gray-900">SignFlow</span>
+          <span className="text-lg font-bold text-gray-900">InfoSign</span>
         </div>
 
         {/* Floating pill — center, hidden on mobile */}
@@ -1196,7 +1196,7 @@ function CTASection() {
             Ready to go paperless?
           </h2>
           <p className="text-xl text-gray-400 mb-10 max-w-xl mx-auto">
-            Join thousands of businesses already using DocuSign to sign documents faster and more securely.
+            Join thousands of businesses already using InfoSign to sign documents faster and more securely.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link to="/register">
@@ -1228,9 +1228,9 @@ function Footer() {
             <div className="w-7 h-7 bg-brand-600 rounded-lg flex items-center justify-center">
               <FileText className="w-3.5 h-3.5 text-white" />
             </div>
-            <span className="text-sm font-semibold text-gray-400">DocuSign</span>
+            <span className="text-sm font-semibold text-gray-400">InfoSign</span>
           </div>
-          <p className="text-sm text-gray-600">© {new Date().getFullYear()} DocuSign. All rights reserved.</p>
+          <p className="text-sm text-gray-600">© {new Date().getFullYear()} InfoSign. All rights reserved.</p>
           <div className="flex items-center gap-6">
             {["Privacy", "Terms", "Security"].map(item => (
               <a key={item} href="#" className="text-sm text-gray-600 hover:text-gray-400 transition-colors">{item}</a>

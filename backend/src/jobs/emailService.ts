@@ -263,3 +263,37 @@ export async function sendPasswordResetEmail(
     html,
   });
 }
+
+export async function sendReminderEmail(
+  recipientEmail: string,
+  recipientName: string,
+  senderName: string,
+  subject: string,
+  signingToken: string,
+): Promise<void> {
+  const signingUrl = `${process.env.FRONTEND_URL}/sign/${signingToken}`;
+  const html = `
+    <h2>Reminder: Document awaiting your signature</h2>
+    <p>Hi ${recipientName},</p>
+    <p>This is a friendly reminder that <strong>${senderName}</strong> is waiting for your signature on:</p>
+    <h3>${subject}</h3>
+    <p>Please review and sign the document by clicking the button below:</p>
+    <a href="${signingUrl}" style="background:#16a34a;color:white;padding:12px 24px;text-decoration:none;border-radius:6px;">Review & Sign</a>
+    <p>This link expires in 7 days.</p>
+  `;
+
+  // Always log the signing URL so it is accessible in dev without SMTP
+  console.log(`[EMAIL] Reminder email to ${recipientEmail}: ${signingUrl}`);
+
+  if (process.env.NODE_ENV === "development" && !process.env.SMTP_USER) {
+    // No SMTP configured — console log is sufficient for local testing
+    return;
+  }
+
+  await getTransporter().sendMail({
+    from: `"DocuSign via ${senderName}" <noreply@digsign.app>`,
+    to: recipientEmail,
+    subject: `Reminder: Please sign ${subject}`,
+    html,
+  });
+}

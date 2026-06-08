@@ -15,6 +15,8 @@ import { LandingPage } from './pages/LandingPage';
 import { ForgotPassword } from './pages/ForgotPassword';
 import { Profile } from './pages/Profile';
 import { ResetPassword } from './pages/ResetPassword';
+import HomePage from "./pages/HomePage";
+import SignDocument from "./pages/SignDocument";
 
 function ProtectedRoute({ children, adminOnly = false }: { children: React.ReactNode; adminOnly?: boolean }) {
   const { user, loading } = useAuth();
@@ -24,7 +26,7 @@ function ProtectedRoute({ children, adminOnly = false }: { children: React.React
     </div>
   );
   if (!user) return <Navigate to="/login" replace />;
-  if (adminOnly && user.role !== 'admin') return <Navigate to="/dashboard" replace />;
+  if (adminOnly && user.role !== 'admin') return <Navigate to="/home" replace />;
   return <>{children}</>;
 }
 
@@ -36,7 +38,7 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
       <div className="w-8 h-8 border-4 border-brand-600 border-t-transparent rounded-full animate-spin"></div>
     </div>
   );
-  if (user) return <Navigate to="/dashboard" replace />;
+  if (user) return <Navigate to="/home" replace />;
   return <>{children}</>;
 }
 
@@ -63,6 +65,8 @@ function AppRoutes() {
       <Route path="/verify-identity" element={<ProtectedRoute><VerifyIdentity /></ProtectedRoute>} />
       <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
       <Route path="/admin/id-review" element={<ProtectedRoute adminOnly><AdminIDReview /></ProtectedRoute>} />
+      <Route path="/home" element={<ProtectedRoute><HomePage /></ProtectedRoute>} />
+      <Route path="/sign-document" element={<ProtectedRoute><SignDocument /></ProtectedRoute>} />
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

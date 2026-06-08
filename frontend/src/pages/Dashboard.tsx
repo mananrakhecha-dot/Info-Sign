@@ -435,27 +435,32 @@ export function Dashboard() {
   // We show all filtered results; only limit when no filters active
   const shownEnvelopes = hasFilters ? displayEnvelopes : displayEnvelopes;
 
+  const sentCount = (statusCounts.SENT||0) + (statusCounts.DELIVERED||0);
+  const completedCount = statusCounts.COMPLETED || 0;
+  const draftCount = statusCounts.DRAFT || 0;
+  const total = envelopes.length || 1;
+
   return (
     <Layout>
-      {/* Delete modal */}
+      {/* ── Delete modal ── */}
       {deleteModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setDeleteModal(null)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm" onClick={() => setDeleteModal(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6 border border-gray-100" onClick={e => e.stopPropagation()}>
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
-                <svg className="w-5 h-5 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+              <div className="w-10 h-10 rounded-xl bg-red-50 flex items-center justify-center flex-shrink-0">
+                <svg className="w-5 h-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
               </div>
               <div>
-                <h3 className="text-base font-bold text-gray-900">Delete Envelope</h3>
-                <p className="text-xs text-gray-400">This action cannot be undone</p>
+                <h3 className="text-base font-semibold text-gray-900">Delete Envelope</h3>
+                <p className="text-xs text-gray-400 mt-0.5">This action cannot be undone</p>
               </div>
             </div>
-            <p className="text-sm text-gray-600 mb-6">
-              Are you sure you want to delete <span className="font-semibold text-gray-900">"{deleteModal.subject}"</span>? This will permanently remove the envelope and all associated documents.
+            <p className="text-sm text-gray-600 mb-6 leading-relaxed">
+              Delete <span className="font-semibold text-gray-900">"{deleteModal.subject}"</span>? This will permanently remove the envelope and all associated documents.
             </p>
             <div className="flex gap-3">
-              <button onClick={() => setDeleteModal(null)} disabled={deleting} className="btn-secondary flex-1 text-sm">Cancel</button>
-              <button onClick={() => handleDelete(deleteModal.id)} disabled={deleting} className="flex-1 text-sm px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50">
+              <button onClick={() => setDeleteModal(null)} disabled={deleting} className="btn-secondary flex-1">Cancel</button>
+              <button onClick={() => handleDelete(deleteModal.id)} disabled={deleting} className="btn-danger flex-1">
                 {deleting ? 'Deleting...' : 'Delete'}
               </button>
             </div>
@@ -463,7 +468,7 @@ export function Dashboard() {
         </div>
       )}
 
-      {/* Rename modal */}
+      {/* ── Rename modal ── */}
       {renameModal && (
         <RenameModal
           id={renameModal.id}
@@ -473,108 +478,138 @@ export function Dashboard() {
         />
       )}
 
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
+      <div className="space-y-6 fade-in-up">
+
+        {/* ── Header ── */}
+        <div className="flex items-start justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-            <p className="text-gray-500 text-sm mt-1">Welcome back, {user?.full_name}</p>
+            <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Dashboard</h1>
+            <p className="text-sm text-gray-500 mt-0.5">Welcome back, <span className="font-medium text-gray-700">{user?.full_name}</span></p>
           </div>
-          <Link to="/envelopes/new" className="btn-primary">+ New Envelope</Link>
+          <Link to="/envelopes/new" className="btn-primary">
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4"/></svg>
+            New Envelope
+          </Link>
         </div>
 
-        {/* Stats */}
+        {/* ── Stats cards ── */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           {[
-            { label: 'Total',     count: envelopes.length,                                          color: 'bg-gray-50 text-gray-700' },
-            { label: 'Sent',      count: (statusCounts.SENT||0)+(statusCounts.DELIVERED||0),        color: 'bg-blue-50 text-blue-700' },
-            { label: 'Completed', count: statusCounts.COMPLETED || 0,                               color: 'bg-green-50 text-green-700' },
-            { label: 'Pending',   count: statusCounts.DRAFT || 0,                                   color: 'bg-yellow-50 text-yellow-700' },
-          ].map(stat => (
-            <div key={stat.label} className={`${stat.color} rounded-xl p-4`}>
-              <p className="text-3xl font-bold">{stat.count}</p>
-              <p className="text-sm font-medium mt-1">{stat.label}</p>
+            {
+              label: 'Total Envelopes', value: envelopes.length, sub: 'All time',
+              icon: <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>,
+              iconBg: 'bg-gray-100', iconColor: 'text-gray-500', numColor: 'text-gray-900',
+              bar: 'bg-gray-400', pct: 100, onClick: null,
+            },
+            {
+              label: 'Sent', value: sentCount, sub: 'Awaiting signatures',
+              icon: <path strokeLinecap="round" strokeLinejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>,
+              iconBg: 'bg-blue-50', iconColor: 'text-blue-600', numColor: 'text-blue-700',
+              bar: 'bg-blue-500', pct: Math.round(sentCount / total * 100),
+              onClick: () => setStatusF('SENT'),
+            },
+            {
+              label: 'Completed', value: completedCount, sub: 'Fully signed',
+              icon: <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>,
+              iconBg: 'bg-brand-50', iconColor: 'text-brand-600', numColor: 'text-brand-700',
+              bar: 'bg-brand-500', pct: Math.round(completedCount / total * 100),
+              onClick: () => setStatusF('COMPLETED'),
+            },
+            {
+              label: 'Drafts', value: draftCount, sub: 'Not yet sent',
+              icon: <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>,
+              iconBg: 'bg-amber-50', iconColor: 'text-amber-600', numColor: 'text-amber-700',
+              bar: 'bg-amber-400', pct: Math.round(draftCount / total * 100),
+              onClick: () => setStatusF('DRAFT'),
+            },
+          ].map((s, i) => (
+            <div
+              key={s.label}
+              onClick={s.onClick ?? undefined}
+              className={`bg-white rounded-2xl border border-gray-100 p-4 transition-all duration-200 ${s.onClick ? 'cursor-pointer hover:shadow-md hover:border-gray-200 hover:-translate-y-0.5' : ''}`}
+              style={{ animationDelay: `${i * 60}ms` }}
+            >
+              <div className="flex items-center justify-between mb-3">
+                <div className={`w-9 h-9 rounded-xl ${s.iconBg} flex items-center justify-center`}>
+                  <svg className={`w-4.5 h-4.5 ${s.iconColor}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>{s.icon}</svg>
+                </div>
+                <span className="text-xs font-medium text-gray-400">{s.pct}%</span>
+              </div>
+              <p className={`text-2xl font-bold tracking-tight ${s.numColor}`}>{s.value}</p>
+              <p className="text-xs font-semibold text-gray-700 mt-0.5">{s.label}</p>
+              <p className="text-[11px] text-gray-400">{s.sub}</p>
+              <div className="mt-3 h-1 bg-gray-100 rounded-full overflow-hidden">
+                <div className={`h-full ${s.bar} rounded-full transition-all duration-700`} style={{ width: `${s.pct}%` }} />
+              </div>
             </div>
           ))}
         </div>
 
-        {/* Envelope table */}
-        <div className="card p-0 overflow-visible">
+        {/* ── Envelope table ── */}
+        <div className="bg-white rounded-2xl border border-gray-100 overflow-visible" style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
 
-          {/* Table header + filters */}
-          <div className="px-5 py-3 border-b border-gray-100">
-            {/* Top row: title + view all */}
+          {/* Table toolbar */}
+          <div className="px-5 py-4 border-b border-gray-100">
             <div className="flex items-center justify-between mb-3">
               <div>
-                <h2 className="font-semibold text-gray-900">
+                <h2 className="font-semibold text-gray-900 text-[15px]">
                   {hasFilters ? 'Filtered Envelopes' : 'Recent Envelopes'}
                 </h2>
                 <p className="text-xs text-gray-400 mt-0.5">
                   {hasFilters
-                    ? `${shownEnvelopes.length} of ${envelopes.length} envelopes`
-                    : `Showing last ${Math.min(RECENT_LIMIT, envelopes.length)} envelopes`
-                  }
+                    ? `${shownEnvelopes.length} of ${envelopes.length} envelopes match`
+                    : `Showing last ${Math.min(RECENT_LIMIT, envelopes.length)} envelopes`}
                 </p>
               </div>
               {hasFilters && (
-                <button onClick={clearAllFilters} className="text-xs text-gray-400 hover:text-red-500 transition-colors px-2 py-1 rounded hover:bg-red-50">
-                  Clear all ✕
+                <button onClick={clearAllFilters} className="text-xs text-gray-400 hover:text-red-500 transition-colors flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-red-50">
+                  Clear filters
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
                 </button>
               )}
             </div>
 
-            {/* Filter row */}
             <div className="flex items-center gap-2 flex-wrap">
-              {/* Search */}
-              <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5 focus-within:border-brand-400 focus-within:bg-white transition-all min-w-[160px]">
+              <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 focus-within:border-brand-400 focus-within:bg-white focus-within:ring-2 focus-within:ring-brand-500/10 transition-all min-w-[200px]">
                 <svg className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
                 <input
-                  className="bg-transparent border-none outline-none text-xs text-gray-800 w-full placeholder-gray-400"
-                  placeholder="Search by subject..."
+                  className="bg-transparent border-none outline-none text-sm text-gray-800 w-full placeholder-gray-400"
+                  placeholder="Search envelopes..."
                   value={searchQ}
                   onChange={e => setSearchQ(e.target.value)}
                 />
-                {searchQ && (
-                  <button onClick={() => setSearchQ('')} className="text-gray-400 hover:text-gray-600 text-xs leading-none">✕</button>
-                )}
+                {searchQ && <button onClick={() => setSearchQ('')} className="text-gray-400 hover:text-gray-600 flex-shrink-0"><svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></button>}
               </div>
-
-              {/* Status dropdown */}
               <StatusDropdown value={statusF} counts={statusCounts} onChange={setStatusF}/>
-
-              {/* Recipient dropdown */}
               <RecipientDropdown value={recipF} onChange={setRecipF}/>
-
-              {/* Date dropdown */}
               <DateDropdown value={dateF} onChange={setDateF}/>
             </div>
 
-            {/* Active filter tags */}
             {hasFilters && (
-              <div className="flex items-center gap-2 flex-wrap mt-2.5">
-                <span className="text-xs text-gray-400 font-medium">Active:</span>
+              <div className="flex items-center gap-2 flex-wrap mt-3">
+                <span className="text-xs text-gray-400 font-medium">Active filters:</span>
                 {statusF !== 'all' && (
                   <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-brand-50 text-brand-700 text-xs font-medium border border-brand-100">
                     {statusF === 'important' ? '⭐ Important' : statusF}
-                    <button onClick={() => setStatusF('all')} className="ml-0.5 opacity-60 hover:opacity-100">✕</button>
+                    <button onClick={() => setStatusF('all')} className="ml-0.5 opacity-60 hover:opacity-100 leading-none">×</button>
                   </span>
                 )}
                 {recipF && (
                   <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-purple-50 text-purple-700 text-xs font-medium border border-purple-100">
-                    📧 {recipF}
-                    <button onClick={() => setRecipF('')} className="ml-0.5 opacity-60 hover:opacity-100">✕</button>
+                    {recipF}
+                    <button onClick={() => setRecipF('')} className="ml-0.5 opacity-60 hover:opacity-100 leading-none">×</button>
                   </span>
                 )}
                 {dateF && (
                   <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 text-xs font-medium border border-blue-100">
-                    📅 {dateF.mode} {new Date(dateF.date).toLocaleDateString('en-IN')}
-                    <button onClick={() => setDateF(null)} className="ml-0.5 opacity-60 hover:opacity-100">✕</button>
+                    {dateF.mode} {new Date(dateF.date).toLocaleDateString('en-IN')}
+                    <button onClick={() => setDateF(null)} className="ml-0.5 opacity-60 hover:opacity-100 leading-none">×</button>
                   </span>
                 )}
                 {searchQ && (
                   <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-gray-100 text-gray-600 text-xs font-medium border border-gray-200">
-                    🔍 "{searchQ}"
-                    <button onClick={() => setSearchQ('')} className="ml-0.5 opacity-60 hover:opacity-100">✕</button>
+                    "{searchQ}"
+                    <button onClick={() => setSearchQ('')} className="ml-0.5 opacity-60 hover:opacity-100 leading-none">×</button>
                   </span>
                 )}
               </div>
@@ -583,72 +618,98 @@ export function Dashboard() {
 
           {/* Table body */}
           {loading ? (
-            <div className="p-8 text-center text-gray-400">Loading...</div>
+            <div className="p-8 space-y-3">
+              {[1,2,3,4].map(i => (
+                <div key={i} className="flex items-center gap-4">
+                  <div className="skeleton h-4 w-48 rounded" />
+                  <div className="skeleton h-4 w-20 rounded" />
+                  <div className="skeleton h-4 w-16 rounded" />
+                  <div className="skeleton h-4 w-20 rounded ml-auto" />
+                </div>
+              ))}
+            </div>
           ) : envelopes.length === 0 ? (
-            <div className="p-12 text-center">
-              <svg className="w-12 h-12 text-gray-300 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-              </svg>
-              <p className="text-gray-500">No envelopes yet. Create your first one!</p>
-              <Link to="/envelopes/new" className="btn-primary mt-4 inline-flex">Create Envelope</Link>
+            <div className="py-16 text-center">
+              <div className="w-16 h-16 bg-gray-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <svg className="w-8 h-8 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                </svg>
+              </div>
+              <p className="text-base font-semibold text-gray-700 mb-1">No envelopes yet</p>
+              <p className="text-sm text-gray-400 mb-5">Create your first envelope to get started</p>
+              <Link to="/envelopes/new" className="btn-primary">Create Envelope</Link>
             </div>
           ) : shownEnvelopes.length === 0 ? (
-            <div className="p-12 text-center">
-              <svg className="w-12 h-12 text-gray-200 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-              </svg>
-              <p className="text-gray-700 text-sm font-semibold mb-1">No records found</p>
-              <p className="text-gray-400 text-xs mb-3">No documents match the selected filters. Try adjusting your search.</p>
-              <button onClick={clearAllFilters} className="text-xs text-brand-600 hover:text-brand-700 font-medium underline underline-offset-2">Clear all filters</button>
+            <div className="py-16 text-center">
+              <div className="w-16 h-16 bg-gray-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <svg className="w-8 h-8 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                </svg>
+              </div>
+              <p className="text-base font-semibold text-gray-700 mb-1">No results found</p>
+              <p className="text-sm text-gray-400 mb-4">Try adjusting your filters</p>
+              <button onClick={clearAllFilters} className="text-sm text-brand-600 hover:text-brand-700 font-medium">Clear all filters</button>
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full caption-bottom text-sm">
+              <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-gray-100">
-                    <th className="h-11 px-5 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Subject</th>
-                    <th className="h-11 px-5 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Status</th>
-                    <th className="h-11 px-5 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Recipients</th>
-                    <th className="h-11 px-5 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Date</th>
-                    <th className="h-11 px-5 text-right text-xs font-semibold text-gray-400 uppercase tracking-wider">Actions</th>
+                  <tr className="border-b border-gray-100 bg-gray-50/50">
+                    <th className="table-header-cell">Subject</th>
+                    <th className="table-header-cell">Status</th>
+                    <th className="table-header-cell">Recipients</th>
+                    <th className="table-header-cell">Created</th>
+                    <th className="table-header-cell text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="[&_tr:last-child]:border-0">
+                <tbody>
                   {shownEnvelopes.map(envelope => (
-                    <tr key={envelope.id} className="border-b border-gray-50 transition-colors hover:bg-gray-50/70">
-                      <td className="px-5 py-3.5 align-middle">
-                        <div className="flex items-center gap-2">
+                    <tr key={envelope.id} className="table-row">
+                      <td className="table-cell">
+                        <div className="flex items-center gap-2.5">
                           {envelope.important && (
                             <svg className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
                               <path d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/>
                             </svg>
                           )}
                           <div>
-                            <p className="font-medium text-gray-900 truncate max-w-xs">{envelope.subject}</p>
-                            <p className="text-xs text-gray-400 font-mono mt-0.5">{envelope.id.slice(0,8)}...</p>
+                            <p className="font-medium text-gray-900 truncate max-w-[260px]">{envelope.subject}</p>
+                            <p className="text-xs text-gray-400 font-mono mt-0.5">{envelope.id.slice(0,8)}…</p>
                           </div>
                         </div>
                       </td>
-                      <td className="px-5 py-3.5 align-middle"><StatusBadge status={envelope.status}/></td>
-                      <td className="px-5 py-3.5 align-middle text-sm text-gray-500">
-                        {envelope.signed_count || 0} / {envelope.recipient_count || 0} signed
+                      <td className="table-cell"><StatusBadge status={envelope.status}/></td>
+                      <td className="table-cell">
+                        <div className="flex items-center gap-2">
+                          <div className="flex -space-x-1">
+                            {Array.from({ length: Math.min(envelope.recipient_count || 0, 3) }).map((_, i) => (
+                              <div key={i} className="w-6 h-6 rounded-full bg-brand-100 border-2 border-white flex items-center justify-center text-[9px] font-bold text-brand-700">
+                                {String.fromCharCode(65 + i)}
+                              </div>
+                            ))}
+                          </div>
+                          <span className="text-xs text-gray-500">{envelope.signed_count || 0}/{envelope.recipient_count || 0} signed</span>
+                        </div>
                       </td>
-                      <td className="px-5 py-3.5 align-middle text-sm text-gray-500">
+                      <td className="table-cell text-sm text-gray-500">
                         {new Date(envelope.created_at).toLocaleDateString('en-IN')}
                       </td>
-                      <td className="px-5 py-3.5 align-middle text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <Link to={`/envelopes/${envelope.id}`} className="text-brand-600 hover:text-brand-700 text-sm font-medium px-2 py-1 rounded hover:bg-brand-50 transition-colors">
-                            View →
+                      <td className="table-cell text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <Link
+                            to={`/envelopes/${envelope.id}`}
+                            className="inline-flex items-center gap-1 text-xs font-semibold text-brand-600 hover:text-brand-700 px-2.5 py-1.5 rounded-lg hover:bg-brand-50 transition-colors"
+                          >
+                            View
+                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7"/></svg>
                           </Link>
                           <div className="relative">
                             <button
                               onClick={() => setOpenMenu(openMenu === envelope.id ? null : envelope.id)}
                               className="w-7 h-7 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
-                              title="More actions"
                             >
-                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                                <circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/>
                               </svg>
                             </button>
                             {openMenu === envelope.id && (
@@ -670,15 +731,13 @@ export function Dashboard() {
             </div>
           )}
 
-          {/* Footer */}
           {!loading && !hasFilters && envelopes.length > RECENT_LIMIT && (
-            <div className="px-5 py-3 border-t border-gray-100 text-xs text-gray-400 text-center">
-              Showing {RECENT_LIMIT} of {envelopes.length} envelopes — use filters to find specific ones
+            <div className="px-5 py-3.5 border-t border-gray-100 flex items-center justify-between">
+              <p className="text-xs text-gray-400">Showing {RECENT_LIMIT} of {envelopes.length} envelopes</p>
+              <button onClick={() => setStatusF('all')} className="text-xs text-brand-600 hover:text-brand-700 font-medium">View all →</button>
             </div>
           )}
         </div>
-
-
 
       </div>
     </Layout>

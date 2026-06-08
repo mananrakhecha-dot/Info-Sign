@@ -1,5 +1,5 @@
 import { Queue, Worker } from "bullmq";
-import { sendSigningInvitation, sendCompletionEmail } from "./emailService";
+import { sendSigningInvitation, sendCompletionEmail, sendReminderEmail } from "./emailService";
 import { generateCRL } from "../ca/crl";
 import { checkAndRenewCertificates } from "../ca/certIssuer";
 import { query } from "../db/pool";
@@ -33,6 +33,36 @@ export function initWorkers(): void {
           data.senderName,
           data.subject,
           data.message,
+          data.signingToken,
+        );
+      } else if (type === "reminder") {
+        // Guard: skip if recipient already signed/declined or envelope is no longer active.
+        // This prevents the 24h auto-reminder from emailing someone who signed in the meantime,
+        // and also protects manual reminders queued just before a sign event races in.
+        if (data.recipientId && data.envelopeId) {
+          const { rows: recRows } = await query<any>(
+            "SELECT status FROM envelope_recipients WHERE id=$1 AND envelope_id=$2",
+            [data.recipientId, data.envelopeId],
+          );
+          if (!recRows[0] || recRows[0].status !== "PENDING") {
+            console.log(`[Email] Skipping reminder — recipient ${data.recipientId} is no longer PENDING`);
+            return;
+          }
+          const { rows: envRows } = await query<any>(
+            "SELECT status FROM envelopes WHERE id=$1",
+            [data.envelopeId],
+          );
+          const inactiveStatuses = ["VOIDED", "DECLINED", "COMPLETED", "TAMPERED"];
+          if (inactiveStatuses.includes(envRows[0]?.status)) {
+            console.log(`[Email] Skipping reminder — envelope ${data.envelopeId} is ${envRows[0]?.status}`);
+            return;
+          }
+        }
+        await sendReminderEmail(
+          data.recipientEmail,
+          data.recipientName,
+          data.senderName,
+          data.subject,
           data.signingToken,
         );
       }
@@ -178,14 +208,15 @@ export function initWorkers(): void {
       // ── Step 1b: Save certificate to disk + record in DB ────────────────────
       if (certBuffer) {
         try {
-          const { saveFile } = await import("../modules/storage");
+          const { saveFile, computeSHA256 } = await import("../modules/storage");
           const certFileName = `certificate-${envelopeId}.pdf`;
           const certPath = saveFile(
-            "documents",
+            "certificates",
             certFileName,
             certBuffer,
             true,
           );
+          const certHash = computeSHA256(certBuffer);
 
           const { rows: existingCert } = await query<any>(
             `SELECT id FROM envelope_documents
@@ -197,7 +228,7 @@ export function initWorkers(): void {
               `INSERT INTO envelope_documents
                (envelope_id, file_name, file_path, sha256_hash, document_type, page_count)
                VALUES ($1, $2, $3, $4, 'certificate', 1)`,
-              [envelopeId, certFileName, certPath, certFileName],
+              [envelopeId, certFileName, certPath, certHash],
             );
           } else {
             await query(

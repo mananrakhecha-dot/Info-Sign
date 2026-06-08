@@ -222,146 +222,163 @@ export function NewEnvelope() {
 
   return (
     <Layout>
-      <div className="max-w-3xl mx-auto">
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold text-gray-900">New Envelope</h1>
-          <div className="flex items-center gap-2 mt-4">
-            {steps.map((s, i) => (
-              <React.Fragment key={s.id}>
-                <div className={`flex items-center gap-2 ${step === s.id ? 'text-brand-700' : steps.findIndex(x => x.id === step) > i ? 'text-green-600' : 'text-gray-400'}`}>
-                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold
-                    ${step === s.id ? 'bg-brand-600 text-white' : steps.findIndex(x => x.id === step) > i ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-500'}`}>
-                    {steps.findIndex(x => x.id === step) > i ? '✓' : i + 1}
+      <div className="max-w-3xl mx-auto fade-in-up">
+
+        {/* ── Header + Step indicator ── */}
+        <div className="mb-7">
+          <h1 className="text-2xl font-bold text-gray-900 tracking-tight mb-5">New Envelope</h1>
+          <div className="flex items-center">
+            {steps.map((s, i) => {
+              const currentIdx = steps.findIndex(x => x.id === step);
+              const done = currentIdx > i;
+              const active = currentIdx === i;
+              return (
+                <React.Fragment key={s.id}>
+                  <div className="flex flex-col items-center">
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-200 ${
+                      done   ? 'bg-brand-600 text-white shadow-sm' :
+                      active ? 'bg-brand-600 text-white shadow-md shadow-brand-200' :
+                               'bg-white border-2 border-gray-200 text-gray-400'
+                    }`}>
+                      {done ? (
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>
+                      ) : i + 1}
+                    </div>
+                    <span className={`text-[10px] mt-1.5 font-semibold ${active ? 'text-brand-600' : done ? 'text-brand-500' : 'text-gray-400'}`}>{s.label}</span>
                   </div>
-                  <span className="text-sm font-medium hidden sm:inline">{s.label}</span>
-                </div>
-                {i < steps.length - 1 && <div className="flex-1 h-px bg-gray-200" />}
-              </React.Fragment>
-            ))}
+                  {i < steps.length - 1 && (
+                    <div className={`flex-1 h-0.5 mx-2 mb-4 transition-colors duration-300 ${done ? 'bg-brand-500' : 'bg-gray-200'}`}/>
+                  )}
+                </React.Fragment>
+              );
+            })}
           </div>
         </div>
 
-        {/* Step 1: Upload */}
+        {/* ── Step 1: Upload ── */}
         {step === 'upload' && (
-          <div className="card space-y-4">
+          <div className="bg-white rounded-2xl border border-gray-100 p-6 space-y-5" style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
             <h2 className="font-semibold text-gray-900">Document Details</h2>
             <div>
-              <label className="label">Subject *</label>
+              <label className="label">Subject <span className="text-red-500">*</span></label>
               <input className="input" type="text" placeholder="e.g. Employment Agreement Q3 2024"
-                value={subject} onChange={e => setSubject(e.target.value)} />
+                value={subject} onChange={e => setSubject(e.target.value)}/>
             </div>
             <div>
               <label className="label">Message to Recipients</label>
               <textarea className="input min-h-[80px] resize-none" placeholder="Please review and sign this document..."
-                value={message} onChange={e => setMessage(e.target.value)} />
+                value={message} onChange={e => setMessage(e.target.value)}/>
             </div>
             <div>
-              <label className="label">PDF Document *</label>
-              <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-brand-400 transition-colors">
-                <input type="file" accept=".pdf,application/pdf" className="hidden" id="pdf-upload"
-                  onChange={e => setPdfFile(e.target.files?.[0] || null)} />
-                <label htmlFor="pdf-upload" className="cursor-pointer">
-                  {pdfFile ? (
-                    <div>
-                      <p className="text-green-600 font-medium text-lg">📄 {pdfFile.name}</p>
-                      <p className="text-gray-400 text-sm">{(pdfFile.size / 1024 / 1024).toFixed(2)} MB</p>
+              <label className="label">PDF Document <span className="text-red-500">*</span></label>
+              <input type="file" accept=".pdf,application/pdf" className="hidden" id="pdf-upload"
+                onChange={e => setPdfFile(e.target.files?.[0] || null)}/>
+              <label htmlFor="pdf-upload" className={`block border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all duration-200 ${
+                pdfFile ? 'border-brand-400 bg-brand-50/40' : 'border-gray-200 hover:border-brand-300 hover:bg-gray-50'
+              }`}>
+                {pdfFile ? (
+                  <div>
+                    <div className="w-12 h-12 bg-red-50 rounded-xl flex items-center justify-center mx-auto mb-3">
+                      <svg className="w-6 h-6 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
                     </div>
-                  ) : (
-                    <div>
-                      <svg className="w-12 h-12 text-gray-300 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                      </svg>
-                      <p className="text-gray-500">Click to upload PDF (max 25 MB)</p>
-                    </div>
-                  )}
-                </label>
-              </div>
+                    <p className="font-semibold text-gray-900">{pdfFile.name}</p>
+                    <p className="text-xs text-gray-400 mt-1">{(pdfFile.size / 1024 / 1024).toFixed(2)} MB · Click to change</p>
+                  </div>
+                ) : (
+                  <div>
+                    <svg className="w-10 h-10 text-gray-300 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                    </svg>
+                    <p className="text-gray-500 font-medium">Drop PDF here or click to browse</p>
+                    <p className="text-xs text-gray-400 mt-1">PDF only · Max 25 MB</p>
+                  </div>
+                )}
+              </label>
             </div>
-            <button className="btn-primary w-full" onClick={handleUpload} disabled={loading || !pdfFile || !subject}>
-              {loading ? 'Uploading...' : 'Upload & Continue →'}
+            <button className="btn-primary w-full justify-center" onClick={handleUpload} disabled={loading || !pdfFile || !subject}>
+              {loading ? (
+                <span className="flex items-center gap-2"><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"/>Uploading…</span>
+              ) : 'Upload & Continue'}
             </button>
           </div>
         )}
 
-        {/* Step 2: Recipients */}
+        {/* ── Step 2: Recipients ── */}
         {step === 'recipients' && (
-          <div className="card space-y-4">
+          <div className="bg-white rounded-2xl border border-gray-100 p-6 space-y-4" style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
             <h2 className="font-semibold text-gray-900">Add Recipients</h2>
-            {recipients.map((r, i) => (
-              <div key={i} className={`rounded-lg p-4 space-y-3 border-2 ${RECIPIENT_BADGE_COLORS[i % RECIPIENT_BADGE_COLORS.length].includes('blue') ? 'border-blue-200 bg-blue-50/30' : i % 4 === 1 ? 'border-purple-200 bg-purple-50/30' : i % 4 === 2 ? 'border-orange-200 bg-orange-50/30' : 'border-pink-200 bg-pink-50/30'}`}>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold border ${RECIPIENT_BADGE_COLORS[i % RECIPIENT_BADGE_COLORS.length]}`}>{i + 1}</span>
-                    <span className="text-sm font-medium text-gray-700">Recipient {i + 1}</span>
+            {recipients.map((r, i) => {
+              const borderColors = ['border-blue-200 bg-blue-50/30', 'border-purple-200 bg-purple-50/30', 'border-orange-200 bg-orange-50/30', 'border-pink-200 bg-pink-50/30'];
+              return (
+                <div key={i} className={`rounded-xl p-4 space-y-3 border-2 ${borderColors[i % borderColors.length]}`}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold border ${RECIPIENT_BADGE_COLORS[i % RECIPIENT_BADGE_COLORS.length]}`}>{i + 1}</span>
+                      <span className="text-sm font-semibold text-gray-700">Recipient {i + 1}</span>
+                    </div>
+                    {recipients.length > 1 && (
+                      <button className="text-xs text-red-400 hover:text-red-600 font-medium transition-colors"
+                        onClick={() => setRecipients(rs => rs.filter((_, ri) => ri !== i))}>Remove</button>
+                    )}
                   </div>
-                  {recipients.length > 1 && (
-                    <button className="text-red-500 text-sm hover:text-red-700"
-                      onClick={() => setRecipients(rs => rs.filter((_, ri) => ri !== i))}>Remove</button>
-                  )}
-                </div>
-                <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="label">Full Name</label>
+                      <input className="input" type="text" placeholder="Jane Doe"
+                        value={r.full_name} onChange={e => setRecipients(rs => rs.map((x, ri) => ri === i ? { ...x, full_name: e.target.value } : x))}/>
+                    </div>
+                    <div>
+                      <label className="label">Email</label>
+                      <input className="input" type="email" placeholder="jane@example.com"
+                        value={r.email} onChange={e => setRecipients(rs => rs.map((x, ri) => ri === i ? { ...x, email: e.target.value } : x))}/>
+                    </div>
+                  </div>
                   <div>
-                    <label className="label">Full Name</label>
-                    <input className="input" type="text" placeholder="Jane Doe"
-                      value={r.full_name} onChange={e => setRecipients(rs => rs.map((x, ri) => ri === i ? { ...x, full_name: e.target.value } : x))} />
-                  </div>
-                  <div>
-                    <label className="label">Email</label>
-                    <input className="input" type="email" placeholder="jane@example.com"
-                      value={r.email} onChange={e => setRecipients(rs => rs.map((x, ri) => ri === i ? { ...x, email: e.target.value } : x))} />
+                    <label className="label">Required Identity Level</label>
+                    <select className="input" value={r.auth_required}
+                      onChange={e => setRecipients(rs => rs.map((x, ri) => ri === i ? { ...x, auth_required: e.target.value as 'SES' | 'AES' } : x))}>
+                      <option value="SES">SES — Email verified (standard)</option>
+                      <option value="AES">AES — Advanced (phone OTP + ID)</option>
+                    </select>
                   </div>
                 </div>
-                <div>
-                  <label className="label">Required Identity Level</label>
-                  <select className="input" value={r.auth_required}
-                    onChange={e => setRecipients(rs => rs.map((x, ri) => ri === i ? { ...x, auth_required: e.target.value as 'SES' | 'AES' } : x))}>
-                    <option value="SES">SES — Email verified (standard)</option>
-                    <option value="AES">AES — Advanced (phone OTP + ID)</option>
-                  </select>
-                </div>
-              </div>
-            ))}
-            <button className="btn-secondary w-full text-sm"
+              );
+            })}
+            <button className="w-full py-2.5 rounded-xl border-2 border-dashed border-gray-200 hover:border-brand-300 hover:bg-brand-50/30 text-sm font-medium text-gray-500 hover:text-brand-600 transition-all duration-200"
               onClick={() => setRecipients(rs => [...rs, { email: '', full_name: '', order_index: rs.length + 1, auth_required: 'SES' }])}>
               + Add Another Recipient
             </button>
-            <div className="flex gap-3 pt-2">
+            <div className="flex gap-3 pt-1">
               <button className="btn-secondary" onClick={() => setStep('upload')}>Back</button>
               <button className="btn-primary flex-1" onClick={handleSaveRecipients} disabled={loading}>
-                {loading ? 'Saving...' : 'Save & Place Fields →'}
+                {loading ? 'Saving…' : 'Save & Place Fields'}
               </button>
             </div>
           </div>
         )}
 
-        {/* Step 3: Field placement */}
+        {/* ── Step 3: Field placement ── */}
         {step === 'fields' && (
           <div className="space-y-4">
-            <div className="card">
-              <h2 className="font-semibold text-gray-900 mb-3">Place Signature Fields</h2>
+            <div className="bg-white rounded-2xl border border-gray-100 p-5" style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+              <h2 className="font-semibold text-gray-900 mb-4">Place Signature Fields</h2>
 
-              {/* ── FIX 1: Recipient coverage tracker ─────────────────────────── */}
+              {/* Recipient coverage */}
               {recipients.length > 1 && (
-                <div className="mb-4 p-3 rounded-lg border border-gray-200 bg-gray-50">
-                  <p className="text-xs font-semibold text-gray-600 mb-2 uppercase tracking-wide">Field coverage — every recipient needs at least one field</p>
+                <div className="mb-4 p-3 rounded-xl border border-gray-100 bg-gray-50">
+                  <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-widest mb-2">Field Coverage</p>
                   <div className="flex flex-wrap gap-2">
                     {recipients.map((r, i) => {
                       const count = fields.filter(f => f.recipient_index === i).length;
                       const hasFields = count > 0;
                       return (
-                        <button
-                          key={i}
-                          onClick={() => setActiveRecipient(i)}
+                        <button key={i} onClick={() => setActiveRecipient(i)}
                           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
-                            activeRecipient === i
-                              ? `${RECIPIENT_BADGE_COLORS[i % RECIPIENT_BADGE_COLORS.length]} ring-2 ring-offset-1 ring-current`
-                              : hasFields
-                              ? 'bg-green-50 text-green-700 border-green-300'
-                              : 'bg-red-50 text-red-600 border-red-300'
-                          }`}
-                        >
+                            activeRecipient === i ? `${RECIPIENT_BADGE_COLORS[i % RECIPIENT_BADGE_COLORS.length]} ring-2 ring-offset-1 ring-current` :
+                            hasFields ? 'bg-brand-50 text-brand-700 border-brand-300' : 'bg-red-50 text-red-600 border-red-300'
+                          }`}>
                           {hasFields ? '✓' : '!'} {r.full_name || `Recipient ${i + 1}`}
-                          <span className="opacity-70">({count} field{count !== 1 ? 's' : ''})</span>
+                          <span className="opacity-60">({count})</span>
                         </button>
                       );
                     })}
@@ -374,9 +391,10 @@ export function NewEnvelope() {
                 </div>
               )}
 
-              <div className="flex flex-wrap gap-2 mb-4">
+              {/* Controls */}
+              <div className="flex flex-wrap gap-2 mb-4 p-3 bg-gray-50 rounded-xl border border-gray-100">
                 <div>
-                  <label className="label text-xs">Field Type</label>
+                  <label className="label text-[10px] uppercase tracking-wider">Field Type</label>
                   <select className="input text-sm py-1.5" value={activeFieldType} onChange={e => setActiveFieldType(e.target.value as any)}>
                     <option value="signature">Signature</option>
                     <option value="initials">Initials</option>
@@ -385,106 +403,71 @@ export function NewEnvelope() {
                   </select>
                 </div>
                 <div>
-                  <label className="label text-xs">For Recipient</label>
-                  <select
-                    className={`input text-sm py-1.5 font-medium border-2 ${FIELD_COLORS[activeRecipient % FIELD_COLORS.length].split(' ')[0]}`}
-                    value={activeRecipient}
-                    onChange={e => setActiveRecipient(Number(e.target.value))}
-                  >
+                  <label className="label text-[10px] uppercase tracking-wider">Recipient</label>
+                  <select className={`input text-sm py-1.5 font-medium border-2 ${FIELD_COLORS[activeRecipient % FIELD_COLORS.length].split(' ')[0]}`}
+                    value={activeRecipient} onChange={e => setActiveRecipient(Number(e.target.value))}>
                     {recipients.map((r, i) => {
                       const count = fields.filter(f => f.recipient_index === i).length;
-                      return (
-                        <option key={i} value={i}>
-                          {r.full_name || `Recipient ${i + 1}`} ({count} field{count !== 1 ? 's' : ''})
-                        </option>
-                      );
+                      return <option key={i} value={i}>{r.full_name || `Recipient ${i + 1}`} ({count})</option>;
                     })}
                   </select>
                 </div>
                 <div>
-                  <label className="label text-xs">Page</label>
+                  <label className="label text-[10px] uppercase tracking-wider">Page</label>
                   <select className="input text-sm py-1.5" value={activePage} onChange={e => setActivePage(Number(e.target.value))}>
                     {Array.from({ length: pageCount }, (_, i) => <option key={i + 1} value={i + 1}>Page {i + 1}</option>)}
                   </select>
                 </div>
                 <div className="flex items-end">
-                  <button className={`btn-primary text-sm py-1.5 flex items-center gap-1`} onClick={addField}>
-                    + Add Field for <span className="font-bold">{recipients[activeRecipient]?.full_name?.split(' ')[0] || `R${activeRecipient + 1}`}</span>
+                  <button className="btn-primary text-sm py-1.5" onClick={addField}>
+                    + Add for {recipients[activeRecipient]?.full_name?.split(' ')[0] || `R${activeRecipient + 1}`}
                   </button>
                 </div>
               </div>
 
-              <div className="text-xs text-gray-500 mb-2">Fields on page {activePage}: {fields.filter(f => f.page_number === activePage).length}</div>
+              <p className="text-xs text-gray-400 mb-2">Fields on page {activePage}: {fields.filter(f => f.page_number === activePage).length}</p>
 
               {/* PDF canvas */}
-              <div ref={pageRef} className="relative bg-gray-100 border-2 border-gray-300 rounded-lg overflow-auto"
+              <div ref={pageRef} className="relative bg-gray-100 border border-gray-200 rounded-xl overflow-auto"
                 style={{ width: '100%', minHeight: '800px' }}>
                 {pdfFile ? (
-                  <Document
-                    file={pdfFile}
-                    loading={
-                      <div className="flex items-center justify-center" style={{ height: '800px' }}>
-                        <div className="w-8 h-8 border-4 border-brand-600 border-t-transparent rounded-full animate-spin" />
-                      </div>
-                    }
-                    error={
-                      <div className="flex items-center justify-center text-red-400 text-sm" style={{ height: '800px' }}>
-                        Failed to load PDF preview
-                      </div>
-                    }
-                  >
-                    <Page
-                      pageNumber={activePage}
-                      width={pdfPageWidth}
-                      renderTextLayer={false}
-                      renderAnnotationLayer={false}
-                    />
+                  <Document file={pdfFile}
+                    loading={<div className="flex items-center justify-center" style={{ height: '800px' }}><div className="w-8 h-8 border-[3px] border-brand-200 border-t-brand-600 rounded-full animate-spin"/></div>}
+                    error={<div className="flex items-center justify-center text-red-400 text-sm" style={{ height: '800px' }}>Failed to load PDF preview</div>}>
+                    <Page pageNumber={activePage} width={pdfPageWidth} renderTextLayer={false} renderAnnotationLayer={false}/>
                   </Document>
                 ) : (
-                  <div className="absolute inset-0 flex items-center justify-center text-gray-200">
-                    <div className="text-center">
-                      <div className="text-6xl mb-2">📄</div>
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="text-center text-gray-300">
+                      <svg className="w-12 h-12 mx-auto mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}><path strokeLinecap="round" strokeLinejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
                       <p className="text-sm">Page {activePage} of {pageCount}</p>
                     </div>
                   </div>
                 )}
                 <div className="absolute inset-0">
-                  {fields.filter(f => f.page_number === activePage).map((field) => (
-                    <Draggable
-                      key={field.id}
-                      bounds="parent"
+                  {fields.filter(f => f.page_number === activePage).map(field => (
+                    <Draggable key={field.id} bounds="parent"
                       position={{ x: (field.x / 100) * (pageRef.current?.clientWidth || 600), y: (field.y / 100) * (pageRef.current?.clientHeight || 800) }}
                       onStop={(_, data) => {
                         const pW = pageRef.current?.clientWidth || 600;
                         const pH = pageRef.current?.clientHeight || 800;
-                        setFields(fs => fs.map(f => f.id === field.id
-                          ? { ...f, x: (data.x / pW) * 100, y: (data.y / pH) * 100 }
-                          : f
-                        ));
-                      }}
-                    >
-                      <div
-                        className={`absolute cursor-move border-2 rounded px-1 py-0.5 select-none ${FIELD_COLORS[field.recipient_index % FIELD_COLORS.length]}`}
-                        style={{ width: `${field.width}%`, height: `${field.height}%` }}
-                      >
+                        setFields(fs => fs.map(f => f.id === field.id ? { ...f, x: (data.x / pW) * 100, y: (data.y / pH) * 100 } : f));
+                      }}>
+                      <div className={`absolute cursor-move border-2 rounded-lg px-1 py-0.5 select-none shadow-sm ${FIELD_COLORS[field.recipient_index % FIELD_COLORS.length]}`}
+                        style={{ width: `${field.width}%`, height: `${field.height}%` }}>
                         <div className="flex items-center justify-between">
-                          {/* ── FIX 1: Show recipient name clearly on every field ── */}
                           <span className="truncate font-semibold" style={{ fontSize: '9px' }}>
                             {recipients[field.recipient_index]?.full_name?.split(' ')[0] || `R${field.recipient_index + 1}`} · {field.field_type}
                           </span>
                           <button className="text-red-400 hover:text-red-600 ml-1 text-xs leading-none"
-                            onClick={(e) => { e.stopPropagation(); setFields(fs => fs.filter(f => f.id !== field.id)); }}>×</button>
+                            onClick={e => { e.stopPropagation(); setFields(fs => fs.filter(f => f.id !== field.id)); }}>×</button>
                         </div>
                         {field.preview_data ? (
-                          <img src={field.preview_data} alt="sig" className="w-full object-contain" style={{ maxHeight: '60%' }} />
+                          <img src={field.preview_data} alt="sig" className="w-full object-contain" style={{ maxHeight: '60%' }}/>
                         ) : field.field_type === 'date' ? (
-                          <div className="truncate" style={{ fontSize: '9px' }}>
-                            {new Date().toLocaleDateString('en-IN')}
-                          </div>
+                          <div className="truncate" style={{ fontSize: '9px' }}>{new Date().toLocaleDateString('en-IN')}</div>
                         ) : (
-                          <div className="opacity-60 truncate" style={{ fontSize: '9px' }}>
-                            {field.field_type}
-                          </div>
+                          <div className="opacity-60 truncate" style={{ fontSize: '9px' }}>{field.field_type}</div>
                         )}
                       </div>
                     </Draggable>
@@ -494,19 +477,22 @@ export function NewEnvelope() {
             </div>
 
             {/* Field list */}
-            <div className="card">
-              <p className="text-sm font-medium text-gray-700 mb-2">All fields ({fields.length} total):</p>
-              {fields.length === 0 ? <p className="text-gray-400 text-sm">No fields added yet</p> : (
-                <div className="space-y-1">
+            <div className="bg-white rounded-2xl border border-gray-100 p-4" style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+              <p className="text-sm font-semibold text-gray-700 mb-3">All fields <span className="font-normal text-gray-400">({fields.length} total)</span></p>
+              {fields.length === 0 ? (
+                <p className="text-gray-400 text-sm text-center py-2">No fields added yet — add fields using the controls above</p>
+              ) : (
+                <div className="space-y-1.5">
                   {fields.map(f => (
-                    <div key={f.id} className="flex items-center justify-between text-sm py-1">
-                      <span className="text-gray-600">
-                        Page {f.page_number} — {f.field_type} —{' '}
+                    <div key={f.id} className="flex items-center justify-between py-1.5 px-3 rounded-lg hover:bg-gray-50 transition-colors">
+                      <span className="text-sm text-gray-600">
+                        Page {f.page_number} — <span className="capitalize">{f.field_type}</span> —{' '}
                         <span className={`font-medium px-1.5 py-0.5 rounded text-xs ${RECIPIENT_BADGE_COLORS[f.recipient_index % RECIPIENT_BADGE_COLORS.length]}`}>
                           {recipients[f.recipient_index]?.full_name || `R${f.recipient_index + 1}`}
                         </span>
                       </span>
-                      <button className="text-red-400 text-xs hover:text-red-600" onClick={() => setFields(fs => fs.filter(x => x.id !== f.id))}>Remove</button>
+                      <button className="text-red-400 text-xs hover:text-red-600 font-medium transition-colors"
+                        onClick={() => setFields(fs => fs.filter(x => x.id !== f.id))}>Remove</button>
                     </div>
                   ))}
                 </div>
@@ -515,41 +501,52 @@ export function NewEnvelope() {
 
             <div className="flex gap-3">
               <button className="btn-secondary" onClick={() => setStep('recipients')}>Back</button>
-              <button
-                className="btn-primary flex-1"
-                onClick={handleSaveFields}
+              <button className="btn-primary flex-1" onClick={handleSaveFields}
                 disabled={loading || fields.length === 0 || recipientsWithNoFields.length > 0}
-                title={recipientsWithNoFields.length > 0 ? `Missing fields for: ${recipientsWithNoFields.map(r => r.name).join(', ')}` : ''}
-              >
-                {loading ? 'Saving...' : recipientsWithNoFields.length > 0
+                title={recipientsWithNoFields.length > 0 ? `Missing fields for: ${recipientsWithNoFields.map(r => r.name).join(', ')}` : ''}>
+                {loading ? 'Saving…' : recipientsWithNoFields.length > 0
                   ? `⚠ Missing fields for ${recipientsWithNoFields.length} recipient${recipientsWithNoFields.length > 1 ? 's' : ''}`
-                  : 'Save Fields & Review →'}
+                  : 'Save Fields & Review'}
               </button>
             </div>
           </div>
         )}
 
-        {/* Step 4: Review & Send */}
+        {/* ── Step 4: Review & Send ── */}
         {step === 'review' && (
-          <div className="card space-y-6">
+          <div className="bg-white rounded-2xl border border-gray-100 p-6 space-y-6" style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
             <h2 className="font-semibold text-gray-900">Review & Send</h2>
-            <div className="bg-gray-50 rounded-lg p-4 space-y-2">
-              <p><span className="font-medium text-gray-700">Subject:</span> <span className="text-gray-900">{subject}</span></p>
-              <p><span className="font-medium text-gray-700">Document:</span> <span className="text-gray-900">{pdfFile?.name}</span></p>
-              <p><span className="font-medium text-gray-700">Pages:</span> <span className="text-gray-900">{pageCount}</span></p>
-              <p><span className="font-medium text-gray-700">Fields:</span> <span className="text-gray-900">{fields.length} placed</span></p>
+
+            {/* Summary */}
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                { label: 'Subject', value: subject },
+                { label: 'Document', value: pdfFile?.name || '—' },
+                { label: 'Pages', value: String(pageCount) },
+                { label: 'Signature Fields', value: `${fields.length} placed` },
+              ].map(row => (
+                <div key={row.label} className="bg-gray-50 rounded-xl p-3 border border-gray-100">
+                  <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-0.5">{row.label}</p>
+                  <p className="text-sm font-medium text-gray-800 truncate">{row.value}</p>
+                </div>
+              ))}
             </div>
+
+            {/* Recipients */}
             <div>
-              <p className="font-medium text-gray-700 mb-2">Recipients ({recipients.length}):</p>
+              <p className="text-sm font-semibold text-gray-700 mb-3">Recipients ({recipients.length})</p>
               <div className="space-y-2">
                 {recipients.map((r, i) => {
                   const fieldCount = fields.filter(f => f.recipient_index === i).length;
                   return (
-                    <div key={i} className="flex items-center justify-between bg-blue-50 rounded-lg px-4 py-2 text-sm">
-                      <span className="font-medium text-blue-800">{r.full_name}</span>
-                      <span className="text-blue-600">{r.email}</span>
-                      <span className="text-xs text-gray-500">{fieldCount} field{fieldCount !== 1 ? 's' : ''}</span>
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${r.auth_required === 'AES' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
+                    <div key={i} className="flex items-center gap-3 bg-gray-50 rounded-xl px-4 py-3 border border-gray-100">
+                      <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold border flex-shrink-0 ${RECIPIENT_BADGE_COLORS[i % RECIPIENT_BADGE_COLORS.length]}`}>{i+1}</div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-gray-900 truncate">{r.full_name}</p>
+                        <p className="text-xs text-gray-500 truncate">{r.email}</p>
+                      </div>
+                      <span className="text-xs text-gray-400">{fieldCount} field{fieldCount !== 1 ? 's' : ''}</span>
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${r.auth_required === 'AES' ? 'bg-brand-50 text-brand-700 border border-brand-200' : 'bg-blue-50 text-blue-700 border border-blue-200'}`}>
                         {r.auth_required}
                       </span>
                     </div>
@@ -557,13 +554,22 @@ export function NewEnvelope() {
                 })}
               </div>
             </div>
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-sm text-yellow-800">
+
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-800 leading-relaxed">
               <strong>Ready to send?</strong> All recipients will receive an email with a signing link. You cannot edit the envelope after sending.
             </div>
+
             <div className="flex gap-3">
               <button className="btn-secondary" onClick={() => setStep('fields')}>Back</button>
               <button className="btn-primary flex-1" onClick={handleSend} disabled={loading}>
-                {loading ? 'Sending...' : '📨 Send Envelope'}
+                {loading ? (
+                  <span className="flex items-center gap-2"><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"/>Sending…</span>
+                ) : (
+                  <span className="flex items-center gap-2">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
+                    Send Envelope
+                  </span>
+                )}
               </button>
             </div>
           </div>

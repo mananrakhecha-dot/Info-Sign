@@ -109,7 +109,15 @@ router.post(
         return;
       }
       const result = await refreshAccessToken(refreshToken);
-      res.json(result);
+      // Rotate: issue the new refresh token as a replacement httpOnly cookie.
+      // The old token was already deleted from the DB inside refreshAccessToken().
+      res.cookie("refreshToken", result.newRefreshToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "strict",
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+      });
+      res.json({ accessToken: result.accessToken });
     } catch (err) {
       next(err);
     }

@@ -1,8 +1,7 @@
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
-import path from "path";
 import { query } from "../../db/pool";
-import { readFile, saveFile, computeSHA256 } from "../storage";
+import { readFile, computeSHA256 } from "../storage";
 import { decryptPrivateKey } from "../../ca/certIssuer";
 import { embedSignatureIntoPDF, drawVisualSignatureOnly } from "./pdfSigner";
 import { logEvent } from "../audit/auditService";
@@ -155,8 +154,16 @@ export async function completeSigningCeremony(
     throw new AppError("eDisclosure consent required before signing", 403);
   }
 
-  // AES requires OTP re-verification
-  if (recipient.auth_required === "AES" && otpCode) {
+  // AES requires OTP re-verification — the check is mandatory, not optional.
+  // If the client omits otp_code we must reject rather than silently skip,
+  // otherwise an attacker with a valid signing link can bypass 2FA entirely.
+  if (recipient.auth_required === "AES") {
+    if (!otpCode) {
+      throw new AppError(
+        "OTP code is required for AES-level signing. Please complete phone verification.",
+        400,
+      );
+    }
     const { verifyOTP } = await import("../auth/otpService");
     await verifyOTP(user.id, otpCode);
     await logEvent({
@@ -276,10 +283,6 @@ export async function completeSigningCeremony(
 
   // Save updated PDF (overwrite encrypted)
   const newHash = computeSHA256(signedPdfBuffer);
-  // path.basename() handles both Windows (\) and Unix (/) separators correctly
-  const originalFilename = path.basename(docs[0].file_path).replace(".enc", "");
-  saveFile("documents", originalFilename, signedPdfBuffer, false);
-  // Update with re-encrypted version
   const newPath = docs[0].file_path;
   const { encryptFile } = await import("../storage");
   const { promises: fsPromises } = await import("fs");
@@ -315,6 +318,12 @@ export async function completeSigningCeremony(
     metadata: { identityLevel: user.identity_level },
   });
 
+  const { emitEnvelopeEvent } = await import("../../index");
+  emitEnvelopeEvent(payload.envelopeId, "envelope:recipient_signed", {
+    recipientId: payload.recipientId,
+    status: "SIGNED",
+  });
+
   // Check if all signed
   const { rows: remaining } = await query<any>(
     `SELECT count(*) as cnt FROM envelope_recipients WHERE envelope_id=$1 AND status != 'SIGNED' AND status != 'DECLINED'`,
@@ -330,6 +339,7 @@ export async function completeSigningCeremony(
       envelopeId: payload.envelopeId,
       eventType: "envelope_completed",
     });
+    emitEnvelopeEvent(payload.envelopeId, "envelope:completed", {});
 
     // Single path: cocQueue worker generates the certificate PDF then emails
     // everyone (sender + all recipients) with both attachments.

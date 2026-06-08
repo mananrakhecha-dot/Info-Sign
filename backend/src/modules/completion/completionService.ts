@@ -1,8 +1,6 @@
 import { PDFDocument, rgb, StandardFonts, PDFPage } from "pdf-lib";
 import QRCode from "qrcode";
 import { query } from "../../db/pool";
-import { saveFile, readFile, computeSHA256 } from "../storage";
-import { logEvent } from "../audit/auditService";
 
 export async function generateCertificateOfCompletion(
   envelopeId: string,
@@ -294,20 +292,7 @@ export async function generateCertificateOfCompletion(
   const pdfBytes = await pdfDoc.save();
   const pdfBuffer = Buffer.from(pdfBytes);
 
-  const certFilename = `cert-${envelopeId}.pdf.enc`;
-  const certPath = saveFile("certificates", certFilename, pdfBuffer, true);
-
-  await query("UPDATE envelopes SET completion_cert_path=$1 WHERE id=$2", [
-    certPath,
-    envelopeId,
-  ]);
-  await logEvent({
-    envelopeId,
-    eventType: "certificate_generated",
-    metadata: { certPath },
-  });
-
-  // Return the buffer so the caller (cocQueue worker) can attach it to emails
+  // Return the buffer — the cocQueue worker saves to disk and updates the DB
   return pdfBuffer;
 }
 
