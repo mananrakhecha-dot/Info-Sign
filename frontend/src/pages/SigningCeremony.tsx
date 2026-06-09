@@ -1,8 +1,14 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams } from 'react-router-dom';
+import { Document, Page, pdfjs } from 'react-pdf';
 import { signingApi } from '../api/envelopes';
 import { SignatureCaptureModal } from '../components/SignatureCaptureModal';
 import toast from 'react-hot-toast';
+
+pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+  'pdfjs-dist/build/pdf.worker.min.mjs',
+  import.meta.url,
+).toString();
 
 type SigningStep = 'loading' | 'edisclosure' | 'view' | 'done' | 'error' | 'already-signed';
 
@@ -18,6 +24,10 @@ export function SigningCeremony() {
   const [otpRequired, setOtpRequired] = useState(false);
   const [otpCode, setOtpCode] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [activePage, setActivePage] = useState(1);
+  const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
+  const pageRef = useRef<HTMLDivElement>(null);
+  const [pdfPageWidth, setPdfPageWidth] = useState(680);
 
   useEffect(() => {
     if (!token) return;
@@ -42,6 +52,12 @@ export function SigningCeremony() {
         } else {
           setStep('view');
         }
+        // Fetch PDF blob for react-pdf rendering
+        const docUrl = signingApi.getDocumentUrl(token!);
+        fetch(docUrl, { credentials: 'include' })
+          .then(r => r.blob())
+          .then(blob => setPdfBlobUrl(URL.createObjectURL(blob)))
+          .catch(() => {});
       })
       .catch(err => {
         setStep('error');
@@ -99,6 +115,14 @@ export function SigningCeremony() {
       toast('You have declined to sign this document.');
     } catch (err: any) { toast.error(err.response?.data?.error || 'Failed to decline'); }
   };
+
+  // ── PDF page width measurement — must be BEFORE any conditional returns ─
+  useEffect(() => {
+    const measure = () => { if (pageRef.current) setPdfPageWidth(pageRef.current.clientWidth - 4); };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, []);
 
   // ── Loading ──────────────────────────────────────────────────────────────
   if (step === 'loading') {
@@ -210,10 +234,11 @@ export function SigningCeremony() {
 
   // ── Main signing view ────────────────────────────────────────────────────
   const fields: any[] = context?.fields || [];
-  const docUrl = signingApi.getDocumentUrl(token!);
+  const pageCount: number = context?.documents?.[0]?.page_count || 1;
   const captureFields = fields.filter(needsCapture);
   const signedCount = captureFields.filter((f: any) => signatureData[f.id]).length;
-  const allSigned = signedCount === captureFields.length && captureFields.length >= 0;
+  // allSigned: either no capture fields (date/text only envelope) OR all capture fields are signed
+  const allSigned = captureFields.length === 0 || signedCount === captureFields.length;
   const captureField = captureFieldId ? fields.find((f: any) => f.id === captureFieldId) : null;
   const remaining = captureFields.length - signedCount;
 
@@ -241,7 +266,9 @@ export function SigningCeremony() {
                   <div key={i} className={`w-2 h-2 rounded-full transition-colors ${i < signedCount ? 'bg-brand-500' : 'bg-gray-200'}`} />
                 ))}
               </div>
-              <span className="text-xs font-medium text-gray-500">{signedCount}/{captureFields.length} signed</span>
+              <span className="text-xs font-medium text-gray-500">
+                {signedCount}/{captureFields.length} signature{captureFields.length !== 1 ? 's' : ''} captured
+              </span>
             </div>
           )}
 
@@ -271,7 +298,7 @@ export function SigningCeremony() {
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>
                   Finish Signing
                 </span>
-              ) : `Sign ${remaining} more`}
+              ) : remaining === 1 ? 'Sign 1 more field' : `Sign ${remaining} more fields`}
             </button>
           </div>
         </div>
@@ -296,19 +323,114 @@ export function SigningCeremony() {
       {/* ── Body ── */}
       <div className="flex-1 max-w-6xl mx-auto px-4 py-5 w-full grid grid-cols-1 lg:grid-cols-3 gap-5">
 
-        {/* PDF viewer */}
+        {/* PDF viewer with field overlays */}
         <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-100 overflow-hidden" style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
           <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
             <h2 className="font-semibold text-gray-900 text-sm flex items-center gap-2">
               <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
               Document
             </h2>
-            <span className="text-[10px] font-mono text-gray-400 truncate max-w-[200px]">
-              SHA-256: {context?.documents?.[0]?.sha256_hash?.slice(0, 16) || '…'}
-            </span>
+            <div className="flex items-center gap-2">
+              {pageCount > 1 && Array.from({ length: pageCount }, (_, i) => (
+                <button key={i + 1} onClick={() => setActivePage(i + 1)}
+                  className={`px-2 py-0.5 rounded text-[11px] font-medium border transition-colors ${activePage === i + 1 ? 'bg-brand-50 border-brand-300 text-brand-700' : 'bg-white border-gray-100 text-gray-400 hover:border-gray-200'}`}>
+                  p.{i + 1}
+                </button>
+              ))}
+              <span className="text-[10px] font-mono text-gray-400 truncate max-w-[180px]">
+                SHA: {context?.documents?.[0]?.sha256_hash?.slice(0, 12) || '…'}
+              </span>
+            </div>
           </div>
-          <div className="bg-gray-100" style={{ minHeight: '600px' }}>
-            <iframe src={docUrl} className="w-full" style={{ height: '680px', border: 'none' }} title="Document for signing" />
+          <div className="bg-gray-100 overflow-auto flex justify-center py-4" style={{ minHeight: '600px' }}>
+            <div ref={pageRef} className="relative bg-white shadow-sm" style={{ width: '100%', maxWidth: '720px', minHeight: '600px' }}>
+              {pdfBlobUrl ? (
+                <Document file={pdfBlobUrl}
+                  loading={<div className="flex items-center justify-center" style={{ height: '600px' }}><div className="w-8 h-8 border-[3px] border-brand-200 border-t-brand-600 rounded-full animate-spin"/></div>}
+                  error={<div className="flex items-center justify-center text-red-400 text-sm" style={{ height: '600px' }}>Failed to load document</div>}>
+                  <Page pageNumber={activePage} width={pdfPageWidth} renderTextLayer={false} renderAnnotationLayer={false}/>
+                </Document>
+              ) : (
+                <div className="flex items-center justify-center" style={{ height: '600px' }}>
+                  <div className="w-8 h-8 border-[3px] border-brand-200 border-t-brand-600 rounded-full animate-spin"/>
+                </div>
+              )}
+
+              {/* Field placeholders overlay — same style as sender view */}
+              <div className="absolute inset-0 pointer-events-none">
+                {fields.filter((f: any) => (f.page_number || 1) === activePage).map((field: any) => {
+                  const isSigned = !!signatureData[field.id];
+                  const isCapture = needsCapture(field);
+                  const isSig = field.field_type === 'signature';
+                  const isInitial = field.field_type === 'initials';
+                  const isDate = field.field_type === 'date' || field.field_type === 'timestamp';
+                  const left = `${field.x}%`;
+                  const top = `${field.y}%`;
+                  const width = `${field.width}%`;
+                  const height = `${field.height}%`;
+
+                  return (
+                    <div key={field.id}
+                      className={`absolute pointer-events-auto rounded-sm transition-all duration-200 overflow-hidden ${isCapture ? 'cursor-pointer' : 'cursor-default'}`}
+                      style={{
+                        left, top, width, height,
+                        minWidth: isSig ? '80px' : isInitial ? '60px' : '56px',
+                        minHeight: isSig ? '32px' : '22px',
+                        ...(isSig || isInitial
+                          ? isSigned
+                            ? { background: 'rgba(22,163,74,0.06)', border: '1.5px solid #16a34a' }
+                            : { background: 'rgba(245,158,11,0.10)', border: '1.5px dashed #d97706', animation: 'pulse 2s infinite' }
+                          : { background: 'rgba(22,163,74,0.06)', border: '1.5px solid #16a34a' }
+                        ),
+                      }}
+                      onClick={() => { if (isCapture && !isSigned) setCaptureFieldId(field.id); }}
+                    >
+                      <div className="w-full h-full flex flex-col items-center justify-center px-1.5 overflow-hidden">
+
+                        {/* Signature — signed: show image; unsigned: show "Sign Here" */}
+                        {isSig && (
+                          isSigned ? (
+                            <img src={signatureData[field.id]} alt="signature" className="w-full h-full object-contain p-0.5"/>
+                          ) : (
+                            <>
+                              <svg className="w-3.5 h-3.5 text-amber-600 mb-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+                              <span className="font-semibold text-amber-700 text-center leading-none" style={{ fontSize: '8px' }}>Sign Here</span>
+                            </>
+                          )
+                        )}
+
+                        {/* Initials — signed: show image; unsigned: show "Initial Here" */}
+                        {isInitial && (
+                          isSigned ? (
+                            <img src={signatureData[field.id]} alt="initials" className="w-full h-full object-contain p-0.5"/>
+                          ) : (
+                            <>
+                              <svg className="w-3 h-3 text-amber-600 mb-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129"/></svg>
+                              <span className="font-semibold text-amber-700 text-center leading-none" style={{ fontSize: '8px' }}>Initial Here</span>
+                            </>
+                          )
+                        )}
+
+                        {/* Date / Timestamp */}
+                        {isDate && (
+                          <span className="text-center font-medium text-green-700 leading-tight px-0.5" style={{ fontSize: '9px' }}>
+                            {signatureData[field.id] || new Date().toLocaleDateString('en-IN')}
+                          </span>
+                        )}
+
+                        {/* Contact info / text fields — show pre-filled value */}
+                        {!isSig && !isInitial && !isDate && (
+                          <span className="text-center font-medium text-green-700 truncate w-full" style={{ fontSize: '9px' }}>
+                            {field.preview_data || field.field_type}
+                          </span>
+                        )}
+
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         </div>
 

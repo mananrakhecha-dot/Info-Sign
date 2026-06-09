@@ -1,5 +1,6 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { Spinner } from './components/ui/Spinner';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider, useAuth } from './hooks/useAuth';
 import { Register } from './pages/Register';
@@ -22,7 +23,7 @@ function ProtectedRoute({ children, adminOnly = false }: { children: React.React
   const { user, loading } = useAuth();
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center">
-      <div className="w-8 h-8 border-4 border-brand-600 border-t-transparent rounded-full animate-spin"></div>
+      <Spinner />
     </div>
   );
   if (!user) return <Navigate to="/login" replace />;
@@ -35,7 +36,7 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center">
-      <div className="w-8 h-8 border-4 border-brand-600 border-t-transparent rounded-full animate-spin"></div>
+      <Spinner />
     </div>
   );
   if (user) return <Navigate to="/home" replace />;

@@ -383,17 +383,15 @@ export async function sendReminder(
 
   // Only PENDING recipients need reminders
   if (recipient.status !== "PENDING") {
-    throw new AppError(
-      "Reminder can only be sent to PENDING recipients",
-      400,
-    );
+    throw new AppError("Reminder can only be sent to PENDING recipients", 400);
   }
 
   // Enforce a 1-hour cooldown between manual reminders to prevent inbox flooding.
   // Admins bypass the cooldown so they can force-send in support scenarios.
   const COOLDOWN_MS = 60 * 60 * 1000; // 1 hour
   if (!isAdmin && recipient.last_reminded_at) {
-    const msSinceLast = Date.now() - new Date(recipient.last_reminded_at).getTime();
+    const msSinceLast =
+      Date.now() - new Date(recipient.last_reminded_at).getTime();
     if (msSinceLast < COOLDOWN_MS) {
       const minutesLeft = Math.ceil((COOLDOWN_MS - msSinceLast) / 60_000);
       throw new AppError(
@@ -411,21 +409,18 @@ export async function sendReminder(
   const senderName = senderRows[0]?.full_name || "DocuSign User";
 
   // Queue reminder email (no delay — fires immediately)
-  await emailQueue.add(
-    "reminder",
-    {
-      type: "reminder",
-      data: {
-        envelopeId,
-        recipientId,
-        recipientEmail: recipient.user_email,
-        recipientName: recipient.full_name,
-        senderName,
-        subject: envData.subject,
-        signingToken: recipient.signing_token,
-      },
+  await emailQueue.add("reminder", {
+    type: "reminder",
+    data: {
+      envelopeId,
+      recipientId,
+      recipientEmail: recipient.user_email,
+      recipientName: recipient.full_name,
+      senderName,
+      subject: envData.subject,
+      signingToken: recipient.signing_token,
     },
-  );
+  });
 
   // Update last_reminded_at and increment reminder_count
   await query(
@@ -472,7 +467,11 @@ export async function selfSignDocument(
   // 2. Guard: require SES or AES identity level + a valid certificate.
   // Checking identity_level explicitly prevents edge cases where cert_pem could
   // be set for a NONE-level user (e.g. direct DB manipulation by an admin).
-  if (!user || !user.cert_pem || !["SES", "AES"].includes(user.identity_level)) {
+  if (
+    !user ||
+    !user.cert_pem ||
+    !["SES", "AES"].includes(user.identity_level)
+  ) {
     throw new AppError("Identity verification required to sign documents", 403);
   }
 
@@ -496,7 +495,8 @@ export async function selfSignDocument(
     signerEmail: user.email,
     caName:
       (intCA.cert.subject.getField("CN") as any)?.value ||
-      (process.env.CA_ORG_NAME || "MyOrg Digital Signing CA"),
+      process.env.CA_ORG_NAME ||
+      "MyOrg Digital Signing CA",
     timestamp: new Date(),
     reason: "I approve this document",
   };
@@ -591,9 +591,8 @@ export async function selfSignDocument(
   });
 
   // 12. Generate Certificate of Completion
-  const { generateCertificateOfCompletion } = await import(
-    "../completion/completionService"
-  );
+  const { generateCertificateOfCompletion } =
+    await import("../completion/completionService");
   const cocBuffer = await generateCertificateOfCompletion(envelopeId);
 
   // 13. Save CoC to disk

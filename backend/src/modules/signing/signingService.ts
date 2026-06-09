@@ -237,16 +237,23 @@ export async function completeSigningCeremony(
   const orgName = process.env.CA_ORG_NAME || "MyOrg Digital Signing CA";
   const intCA = getIntermediateCA();
 
-  const fieldsForEmbed = signatureFields.map((f: any) => ({
-    pageNumber: f.page_number,
-    x: parseFloat(f.x),
-    y: parseFloat(f.y),
-    width: parseFloat(f.width),
-    height: parseFloat(f.height),
-    fieldType: f.field_type,
-    signatureData: signatureDataMap[f.id],
-    value: signatureDataMap[f.id],
-  }));
+  const fieldsForEmbed = signatureFields.map((f: any) => {
+    const drawnData = signatureDataMap[f.id]; // base64 drawn by recipient (sig/initials only)
+    // For contact-info / date / text fields the recipient never draws anything —
+    // the value was pre-filled by the sender and stored as preview_data in the DB.
+    // Use drawnData if present (sig/initials), otherwise fall back to preview_data.
+    const resolvedValue = drawnData || (f.preview_data ?? undefined);
+    return {
+      pageNumber: f.page_number,
+      x: parseFloat(f.x),
+      y: parseFloat(f.y),
+      width: parseFloat(f.width),
+      height: parseFloat(f.height),
+      fieldType: f.field_type,
+      signatureData: drawnData, // only used by signature/initials rendering path
+      value: resolvedValue, // used by all other field types
+    };
+  });
 
   const appearance = {
     signerName: recipient.full_name,

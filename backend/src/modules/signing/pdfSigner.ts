@@ -99,79 +99,33 @@ export async function embedSignatureIntoPDF(
         field.signatureData,
         certPem,
       );
-    } else if (field.fieldType === "initials") {
-      const initials = appearance.signerName
-        .split(" ")
-        .map((n) => n[0])
-        .join("")
-        .toUpperCase();
-      page.drawRectangle({
-        x: absX,
-        y: absY,
-        width: absW,
-        height: absH,
-        borderColor: rgb(0.1, 0.6, 0.1),
-        borderWidth: 1,
-      });
-      page.drawText(initials, {
-        x: absX + 4,
-        y: absY + absH / 2 - 6,
-        size: Math.min(absH * 0.5, 14),
-        font: boldFont,
-        color: rgb(0.05, 0.3, 0.05),
-      });
-    } else if (field.fieldType === "date") {
-      let dateStr =
-        field.value && typeof field.value === "string" ? field.value : "";
-      if (!dateStr) {
-        const d = appearance.timestamp;
-        const months = [
-          "Jan",
-          "Feb",
-          "Mar",
-          "Apr",
-          "May",
-          "Jun",
-          "Jul",
-          "Aug",
-          "Sep",
-          "Oct",
-          "Nov",
-          "Dec",
-        ];
-        dateStr = `${String(d.getDate()).padStart(2, "0")} ${months[d.getMonth()]} ${d.getFullYear()}`;
-      }
-      page.drawRectangle({
-        x: absX,
-        y: absY,
-        width: absW,
-        height: absH,
-        borderColor: rgb(0.6, 0.6, 0.6),
-        borderWidth: 0.5,
-      });
-      page.drawText(dateStr, {
-        x: absX + 4,
-        y: absY + absH / 2 - 5,
-        size: Math.min(absH * 0.45, 10),
+    } else {
+      await renderFieldValue(
+        pdfDoc,
+        page,
         font,
-        color: rgb(0.2, 0.2, 0.2),
-      });
-    } else if (field.fieldType === "text" && field.value) {
-      page.drawRectangle({
-        x: absX,
-        y: absY,
-        width: absW,
-        height: absH,
-        borderColor: rgb(0.6, 0.6, 0.6),
-        borderWidth: 0.5,
-      });
-      page.drawText(field.value, {
-        x: absX + 4,
-        y: absY + absH / 2 - 5,
-        size: Math.min(absH * 0.45, 10),
+        boldFont,
+        field.fieldType,
+        field.value,
+        absX,
+        absY,
+        absW,
+        absH,
+        appearance,
+      );
+      await renderFieldValue(
+        pdfDoc,
+        page,
         font,
-        color: rgb(0.2, 0.2, 0.2),
-      });
+        boldFont,
+        field.fieldType,
+        field.value,
+        absX,
+        absY,
+        absW,
+        absH,
+        appearance,
+      );
     }
   }
 
@@ -280,79 +234,20 @@ export async function drawVisualSignatureOnly(
         field.signatureData,
         certPem,
       );
-    } else if (field.fieldType === "initials") {
-      const initials = appearance.signerName
-        .split(" ")
-        .map((n) => n[0])
-        .join("")
-        .toUpperCase();
-      page.drawRectangle({
-        x: absX,
-        y: absY,
-        width: absW,
-        height: absH,
-        borderColor: rgb(0.1, 0.6, 0.1),
-        borderWidth: 1,
-      });
-      page.drawText(initials, {
-        x: absX + 4,
-        y: absY + absH / 2 - 6,
-        size: Math.min(absH * 0.5, 14),
-        font: boldFont,
-        color: rgb(0.05, 0.3, 0.05),
-      });
-    } else if (field.fieldType === "date") {
-      let dateStr =
-        field.value && typeof field.value === "string" ? field.value : "";
-      if (!dateStr) {
-        const d = appearance.timestamp;
-        const months = [
-          "Jan",
-          "Feb",
-          "Mar",
-          "Apr",
-          "May",
-          "Jun",
-          "Jul",
-          "Aug",
-          "Sep",
-          "Oct",
-          "Nov",
-          "Dec",
-        ];
-        dateStr = `${String(d.getDate()).padStart(2, "0")} ${months[d.getMonth()]} ${d.getFullYear()}`;
-      }
-      page.drawRectangle({
-        x: absX,
-        y: absY,
-        width: absW,
-        height: absH,
-        borderColor: rgb(0.6, 0.6, 0.6),
-        borderWidth: 0.5,
-      });
-      page.drawText(dateStr, {
-        x: absX + 4,
-        y: absY + absH / 2 - 5,
-        size: Math.min(absH * 0.45, 10),
+    } else {
+      await renderFieldValue(
+        pdfDoc,
+        page,
         font,
-        color: rgb(0.2, 0.2, 0.2),
-      });
-    } else if (field.fieldType === "text" && field.value) {
-      page.drawRectangle({
-        x: absX,
-        y: absY,
-        width: absW,
-        height: absH,
-        borderColor: rgb(0.6, 0.6, 0.6),
-        borderWidth: 0.5,
-      });
-      page.drawText(field.value, {
-        x: absX + 4,
-        y: absY + absH / 2 - 5,
-        size: Math.min(absH * 0.45, 10),
-        font,
-        color: rgb(0.2, 0.2, 0.2),
-      });
+        boldFont,
+        field.fieldType,
+        field.value,
+        absX,
+        absY,
+        absW,
+        absH,
+        appearance,
+      );
     }
   }
 
@@ -368,6 +263,175 @@ export async function drawVisualSignatureOnly(
   // after ALL recipients have signed.
 
   return Buffer.from(await pdfDoc.save({ useObjectStreams: false }));
+}
+
+/**
+ * Renders any non-signature field type as a labelled rectangle onto the PDF page.
+ * Called from both embedSignatureIntoPDF and drawVisualSignatureOnly.
+ */
+async function renderFieldValue(
+  pdfDoc: PDFDocument,
+  page: any,
+  font: any,
+  boldFont: any,
+  fieldType: string,
+  value: string | undefined,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  appearance: SignatureAppearance,
+): Promise<void> {
+  // Initials: use drawn image if provided, otherwise derive text from signer name
+  if (fieldType === "initials") {
+    page.drawRectangle({
+      x,
+      y,
+      width: w,
+      height: h,
+      borderColor: rgb(0.1, 0.6, 0.1),
+      borderWidth: 1,
+    });
+    if (value) {
+      try {
+        let pdfImage;
+        // Normalise: strip data URI prefix to get raw base64
+        let base64: string;
+        if (value.startsWith("data:image/png")) {
+          base64 = value.replace(/^data:image\/png;base64,/, "");
+          pdfImage = await pdfDoc.embedPng(Buffer.from(base64, "base64"));
+        } else if (
+          value.startsWith("data:image/jpeg") ||
+          value.startsWith("data:image/jpg")
+        ) {
+          base64 = value.replace(/^data:image\/jpe?g;base64,/, "");
+          pdfImage = await pdfDoc.embedJpg(Buffer.from(base64, "base64"));
+        } else if (value.startsWith("data:image/")) {
+          // Unknown image type with data URI — try PNG
+          base64 = value.split(",")[1] ?? value;
+          pdfImage = await pdfDoc.embedPng(Buffer.from(base64, "base64"));
+        } else {
+          // Raw base64 with no prefix — try PNG
+          base64 = value.includes(",") ? value.split(",")[1] : value;
+          pdfImage = await pdfDoc.embedPng(Buffer.from(base64, "base64"));
+        }
+        if (pdfImage) {
+          const padding = 3;
+          const maxW = w - padding * 2;
+          const maxH = h - padding * 2;
+          const imgDims = pdfImage.scale(1);
+          const scaleX = maxW / imgDims.width;
+          const scaleY = maxH / imgDims.height;
+          const scale = Math.min(scaleX, scaleY);
+          const drawW = imgDims.width * scale;
+          const drawH = imgDims.height * scale;
+          const drawX = x + padding + (maxW - drawW) / 2;
+          const drawY = y + padding + (maxH - drawH) / 2;
+          page.drawImage(pdfImage, {
+            x: drawX,
+            y: drawY,
+            width: drawW,
+            height: drawH,
+          });
+          return;
+        }
+      } catch (err) {
+        console.error(
+          "[pdfSigner] initials image embed failed:",
+          err instanceof Error ? err.message : err,
+        );
+        // fall through to text fallback
+      }
+    }
+    // Text fallback — only reached if no valid image data
+    const initials = appearance.signerName
+      .split(" ")
+      .map((n: string) => n[0])
+      .join("")
+      .toUpperCase();
+    page.drawText(initials, {
+      x: x + 4,
+      y: y + h / 2 - 6,
+      size: Math.min(h * 0.5, 14),
+      font: boldFont,
+      color: rgb(0.05, 0.3, 0.05),
+    });
+    return;
+  }
+
+  // Date / Timestamp
+  if (fieldType === "date" || fieldType === "timestamp") {
+    let dateStr = value && typeof value === "string" ? value : "";
+    if (!dateStr) {
+      const d = appearance.timestamp;
+      const months = [
+        "Jan",
+        "Feb",
+        "Mar",
+        "Apr",
+        "May",
+        "Jun",
+        "Jul",
+        "Aug",
+        "Sep",
+        "Oct",
+        "Nov",
+        "Dec",
+      ];
+      dateStr = `${String(d.getDate()).padStart(2, "0")} ${months[d.getMonth()]} ${d.getFullYear()}`;
+    }
+    page.drawRectangle({
+      x,
+      y,
+      width: w,
+      height: h,
+      borderColor: rgb(0.6, 0.6, 0.6),
+      borderWidth: 0.5,
+    });
+    page.drawText(dateStr, {
+      x: x + 4,
+      y: y + h / 2 - 5,
+      size: Math.min(h * 0.45, 10),
+      font,
+      color: rgb(0.2, 0.2, 0.2),
+    });
+    return;
+  }
+
+  // All other field types with a value: name, email, company, title, text, number,
+  // checkbox, dropdown, radio, approve, decline, stamp, note, formula, attachment, drawing
+  if (!value) return; // nothing to render if no value was submitted
+
+  const isApprove = fieldType === "approve";
+  const isDecline = fieldType === "decline";
+  const borderCol = isApprove
+    ? rgb(0.1, 0.6, 0.1)
+    : isDecline
+      ? rgb(0.8, 0.1, 0.1)
+      : rgb(0.6, 0.6, 0.6);
+  const textCol = isApprove
+    ? rgb(0.05, 0.4, 0.05)
+    : isDecline
+      ? rgb(0.6, 0.05, 0.05)
+      : rgb(0.15, 0.15, 0.15);
+
+  page.drawRectangle({
+    x,
+    y,
+    width: w,
+    height: h,
+    borderColor: borderCol,
+    borderWidth: 0.5,
+  });
+  const displayValue = String(value).slice(0, 80);
+  page.drawText(displayValue, {
+    x: x + 4,
+    y: y + h / 2 - 5,
+    size: Math.min(h * 0.45, 10),
+    font,
+    color: textCol,
+    maxWidth: w - 8,
+  });
 }
 
 async function drawSignatureAppearance(

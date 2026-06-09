@@ -22,7 +22,10 @@ import path from "path";
 const router = Router();
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 25 * 1024 * 1024 },
+  limits: {
+    fileSize: 25 * 1024 * 1024, // 25 MB for the PDF
+    fieldSize: 10 * 1024 * 1024, // 10 MB for non-file fields (covers base64 PNG in fields JSON)
+  },
   fileFilter: (_, file, cb) => {
     if (file.mimetype === "application/pdf") cb(null, true);
     else cb(new Error("Only PDF files are allowed"));
@@ -95,7 +98,6 @@ router.patch(
         res.status(400).json({ error: "subject required" });
         return;
       }
-      const { query } = await import("../../db/pool");
       const { rows } = await query(
         "UPDATE envelopes SET subject=$1, message=COALESCE($2, message), updated_at=now() WHERE id=$3 AND sender_id=$4 RETURNING id",
         [subject.trim(), message, id, req.user!.userId],
@@ -183,7 +185,11 @@ router.post(
   requireAuth,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      await sendReminder(req.params.id, req.params.recipientId, req.user!.userId);
+      await sendReminder(
+        req.params.id,
+        req.params.recipientId,
+        req.user!.userId,
+      );
       res.json({ message: "Reminder sent" });
     } catch (err) {
       next(err);
@@ -214,9 +220,10 @@ router.delete(
       // envelope is SENT or beyond, it is part of a legal signing workflow and
       // must be voided (not permanently deleted) to preserve the audit trail.
       if (rows[0].status !== "DRAFT") {
-        res
-          .status(400)
-          .json({ error: "Only DRAFT envelopes can be deleted. Use void to cancel a sent envelope." });
+        res.status(400).json({
+          error:
+            "Only DRAFT envelopes can be deleted. Use void to cancel a sent envelope.",
+        });
         return;
       }
       // Delete cascades to envelope_documents, envelope_recipients, audit_events via FK
@@ -295,9 +302,14 @@ router.get(
         return;
       }
       const buf = readFile(rows[0].file_path, true);
-      const safeName = path.basename(rows[0].file_name || "document.pdf").replace(/[^a-zA-Z0-9._-]/g, "_");
+      const safeName = path
+        .basename(rows[0].file_name || "document.pdf")
+        .replace(/[^a-zA-Z0-9._-]/g, "_");
       res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", `attachment; filename="${safeName}"`);
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${safeName}"`,
+      );
       res.send(buf);
     } catch (err) {
       next(err);
@@ -347,7 +359,7 @@ router.get(
   },
 );
 
-const ALLOWED_FIELD_TYPES = new Set(["signature", "date", "text"]);
+const ALLOWED_FIELD_TYPES = new Set(["signature", "initials", "date", "text"]);
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 router.post(
@@ -369,17 +381,46 @@ router.post(
         throw new AppError("fields must be valid JSON", 400);
       }
       if (!Array.isArray(parsedFields) || parsedFields.length > 50) {
-        throw new AppError("fields must be an array of at most 50 entries", 400);
+        throw new AppError(
+          "fields must be an array of at most 50 entries",
+          400,
+        );
       }
+
+      // Parse the separately-sent signatureData map (index -> base64 PNG)
+      // This avoids embedding large base64 strings inside the fields JSON
+      let parsedSignatureData: Record<string, string> = {};
+      try {
+        if (req.body.signatureData) {
+          parsedSignatureData = JSON.parse(req.body.signatureData);
+        }
+      } catch {
+        /* ignore malformed */
+      }
+
+      // Merge signatureData back into each field by index
+      parsedFields = parsedFields.map((f: any, idx: number) => ({
+        ...f,
+        signatureData: parsedSignatureData[String(idx)] ?? f.signatureData,
+      }));
+
       for (const f of parsedFields) {
         if (!ALLOWED_FIELD_TYPES.has(f.fieldType)) {
           throw new AppError(`Invalid fieldType: ${f.fieldType}`, 400);
         }
-        if (typeof f.x !== "number" || f.x < 0 || f.x > 100) throw new AppError("field x must be 0–100", 400);
-        if (typeof f.y !== "number" || f.y < 0 || f.y > 100) throw new AppError("field y must be 0–100", 400);
-        if (typeof f.width !== "number" || f.width <= 0 || f.width > 100) throw new AppError("field width must be 0–100", 400);
-        if (typeof f.height !== "number" || f.height <= 0 || f.height > 100) throw new AppError("field height must be 0–100", 400);
-        if (f.signatureData && typeof f.signatureData === "string" && f.signatureData.length > 2_000_000) {
+        if (typeof f.x !== "number" || f.x < 0 || f.x > 100)
+          throw new AppError("field x must be 0–100", 400);
+        if (typeof f.y !== "number" || f.y < 0 || f.y > 100)
+          throw new AppError("field y must be 0–100", 400);
+        if (typeof f.width !== "number" || f.width <= 0 || f.width > 100)
+          throw new AppError("field width must be 0–100", 400);
+        if (typeof f.height !== "number" || f.height <= 0 || f.height > 100)
+          throw new AppError("field height must be 0–100", 400);
+        if (
+          f.signatureData &&
+          typeof f.signatureData === "string" &&
+          f.signatureData.length > 2_000_000
+        ) {
           throw new AppError("signatureData too large (max 2 MB base64)", 400);
         }
         if (f.value && typeof f.value === "string" && f.value.length > 500) {
@@ -395,7 +436,10 @@ router.post(
         throw new AppError("recipientEmails must be valid JSON", 400);
       }
       if (!Array.isArray(parsedEmails) || parsedEmails.length > 10) {
-        throw new AppError("recipientEmails must be an array of at most 10 addresses", 400);
+        throw new AppError(
+          "recipientEmails must be an array of at most 10 addresses",
+          400,
+        );
       }
       for (const e of parsedEmails) {
         if (typeof e !== "string" || !EMAIL_RE.test(e) || e.length > 254) {
@@ -404,7 +448,9 @@ router.post(
       }
 
       // Sanitize originalname before storing in DB and echoing in Content-Disposition
-      const safeOriginalName = path.basename(req.file.originalname).replace(/[^a-zA-Z0-9._-]/g, "_");
+      const safeOriginalName = path
+        .basename(req.file.originalname)
+        .replace(/[^a-zA-Z0-9._-]/g, "_");
 
       const result = await selfSignDocument(
         req.user!.userId,
